@@ -1,3 +1,20 @@
+// Initialize Firebase
+const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+// Global roster ID for shared access
+let rosterId = prompt('Enter Roster ID (leave blank for default):') || `${new Date().getFullYear()}_0`;
+
 // Global data storage
 let data = {
     pool1: [],
@@ -5,10 +22,7 @@ let data = {
     year: new Date().getFullYear(),
     month: 0, // Default to January
     holidays: [],
-    unavailable: { // { date: { daytime: [names], evening: [names], al: [names] } }
-        // Example: '2025-9-1': { daytime: ['Alice'], evening: ['Bob'], al: ['Charlie'] }
-    },
-    roster: {}, // { date: { shiftType: [staffNames] } }
+    unavailablekommer: {}, // { date: { shiftType: [staffNames] } }
 };
 
 // Reference to summary window
@@ -20,14 +34,13 @@ const monthNames = [
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-// Load saved data
+// Load saved data from Firestore
 async function loadData() {
-    const year = parseInt(document.getElementById('year').value) || new Date().getFullYear();
-    const month = parseInt(document.getElementById('month').value) || 0;
-    const docId = `${year}_${month}`;
     try {
-        const docRef = db.collection('rosters').doc(docId);
+        const docRef = db.collection('rosters').doc(rosterId);
         const docSnap = await docRef.get();
+        const year = parseInt(document.getElementById('year').value) || new Date().getFullYear();
+        const month = parseInt(document.getElementById('month').value) || 0;
         if (docSnap.exists) {
             data = docSnap.data();
             document.getElementById('pool1').value = data.pool1.join('\n');
@@ -56,16 +69,31 @@ async function loadData() {
     }
 }
 
+// Save data to Firestore
 async function saveData() {
-    const docId = `${data.year}_${data.month}`;
     try {
-        await db.collection('rosters').doc(docId).set(data);
+        await db.collection('rosters').doc(rosterId).set(data);
         updateSummaryWindow();
         showPopup('Data saved to Firestore!');
     } catch (error) {
         console.error('Error saving data:', error);
         showPopup('Failed to save data to Firestore.');
     }
+}
+
+// Real-time listener for roster updates
+function setupRealtimeListener() {
+    db.collection('rosters').doc(rosterId).onSnapshot(doc => {
+        if (doc.exists) {
+            data = doc.data();
+            renderPage2();
+            updateSummaryWindow();
+            showPopup('Roster updated in real-time!');
+        }
+    }, error => {
+        console.error('Error in real-time listener:', error);
+        showPopup('Failed to sync roster updates.');
+    });
 }
 
 // Show pop-up message
@@ -103,14 +131,17 @@ function scrollToBottom() {
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 }
 
+// Page 1: Save staff and month
 async function savePage1() {
     const newYear = parseInt(document.getElementById('year').value) || new Date().getFullYear();
     const newMonth = parseInt(document.getElementById('month').value) || 0;
 
-    // Clear unavailable and roster data if year or month changes
+    // Update rosterId if year or month changes
     if (newYear !== data.year || newMonth !== data.month) {
+        rosterId = prompt('Enter new Roster ID (leave blank for default):') || `${newYear}_${newMonth}`;
         data.unavailable = {};
         data.roster = {};
+        setupRealtimeListener(); // Reattach listener for new rosterId
     }
 
     data.pool1 = document.getElementById('pool1').value.trim().split('\n').filter(name => name.trim());
@@ -135,8 +166,6 @@ function getWeekNumber(year, month, day) {
     return Math.ceil((pastDaysOfMonth + firstDayOfWeek) / 7);
 }
 
-// Page 2: Render roster calendar and AL list
-// Page 2: Render roster calendar and AL list
 // Page 2: Render roster calendar and AL list
 function renderPage2() {
     const calendar = document.getElementById('calendar2');
@@ -419,8 +448,7 @@ function updateSummaryWindow() {
     }
 }
 
-
-// Export roster to Excel
+// Export roster to CSV
 function exportToExcel() {
     const { year, month } = data;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -462,7 +490,7 @@ function exportToExcel() {
     let currentWeek = 1;
     for (let week = 1; week <= weeks; week++) {
         // Week dates row
-        const weekDates = ['Week ' + week, ...Array(7).map((_, index) => {
+        const weekDates = ['Week ' + week, ...Array(7).fill().map((_, index) => {
             if (index === 5) return ['', '', '', '']; // Four columns for Friday
             return ['', '', '']; // Three columns for other days
         }).flat()];
@@ -487,23 +515,23 @@ function exportToExcel() {
         csvRows.push(weekDates.map(cell => `"${cell}"`).join(','));
 
         // Shift rows (N, A, P1, P2, Unavailable)
-        const nRow = ['N', ...Array(7).map((_, index) => {
+        const nRow = ['N', ...Array(7).fill().map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
         }).flat()];
-        const aRow = ['A', ...Array(7).map((_, index) => {
+        const aRow = ['A', ...Array(7).fill().map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
         }).flat()];
-        const p1Row = ['P1', ...Array(7).map((_, index) => {
+        const p1Row = ['P1', ...Array(7).fill().map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
         }).flat()];
-        const p2Row = ['P2', ...Array(7).map((_, index) => {
+        const p2Row = ['P2', ...Array(7).fill().map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
         }).flat()];
-        const unavailableRow = ['Unavailable', ...Array(7).map((_, index) => {
+        const unavailableRow = ['Unavailable', ...Array(7).fill().map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
         }).flat()];
@@ -797,8 +825,8 @@ function generateRoster() {
             const validCandidates = finalCandidates.filter(s => {
                 const assignedShifts = data.roster[date] ? Object.values(data.roster[date]).flat() : [];
                 if (assignedShifts.some(as => as.toLowerCase() === s.toLowerCase())) {
-                    return (data.roster[date]['A']?.some(as => as.toLowerCase() === s.toLowerCase()) || 
-                            data.roster[date]['(A)']?.some(as => as.toLowerCase() === s.toLowerCase()) || 
+                    return (data.roster[date]['A']?.some(as => as.toLowerCase() === s.toLowerCase()) ||
+                            data.roster[date]['(A)']?.some(as => as.toLowerCase() === s.toLowerCase()) ||
                             data.roster[date]['A2']?.some(as => as.toLowerCase() === s.toLowerCase())) && shift === 'N';
                 }
                 if ((shift === 'P1' || shift === 'P2') && data.roster[date]['N']?.some(ns => ns.toLowerCase() === s.toLowerCase())) {
@@ -811,9 +839,9 @@ function generateRoster() {
             if (validCandidates.length > 0) {
                 const selected = validCandidates[Math.floor(Math.random() * validCandidates.length)];
                 data.roster[date][shift] = [selected];
-                if (shift !== 'N' || !data.roster[date]['A']?.some(as => as.toLowerCase() === selected.toLowerCase()) && 
-                    !data.roster[date]['(A)']?.some(as => as.toLowerCase() === s.toLowerCase()) && 
-                    !data.roster[date]['A2']?.some(as => as.toLowerCase() === s.toLowerCase())) {
+                if (shift !== 'N' || !data.roster[date]['A']?.some(as => as.toLowerCase() === selected.toLowerCase()) &&
+                    !data.roster[date]['(A)']?.some(as => as.toLowerCase() === selected.toLowerCase()) &&
+                    !data.roster[date]['A2']?.some(as => as.toLowerCase() === selected.toLowerCase())) {
                     availablePool1 = availablePool1.filter(s => s.toLowerCase() !== selected.toLowerCase());
                     availablePool2 = availablePool2.filter(s => s.toLowerCase() !== selected.toLowerCase());
                 }
@@ -832,29 +860,24 @@ function generateRoster() {
     }
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    loadData();
-    goToPage(1); // Set step1 as active on load
-    updateOfficer(); // Set initial officer
+// Clear only Page 2 data (roster and unavailable staff)
+async function clearAll() {
+    data.roster = {};
+    data.unavailable = {};
+    await saveData();
+    renderPage2();
+    showPopup('Page 2 data cleared in Firestore!');
+}
 
-    // Add event listeners for year and month changes
-    document.getElementById('year').addEventListener('change', updateOfficer);
-    document.getElementById('month').addEventListener('change', updateOfficer);
+// Clear roster shifts only
+async function clearRoster() {
+    data.roster = {};
+    await saveData();
+    renderPage2();
+    showPopup('Roster shifts cleared!');
+}
 
-    // Add scroll event listener for scroll-to-top icon
-    window.addEventListener('scroll', () => {
-        const scrollToTopBtn = document.querySelector('.scroll-to-top');
-        if (scrollToTopBtn) {
-            if (window.scrollY > 100) { // Show when scrolled down 100px
-                scrollToTopBtn.classList.add('show');
-            } else {
-                scrollToTopBtn.classList.remove('show');
-            }
-        }
-    });
-});
-
+// Update officer based on month
 function updateOfficer() {
     const month = parseInt(document.getElementById('month').value);
     let officer = '';
@@ -888,19 +911,7 @@ function updateOfficer() {
     document.getElementById('officerName').textContent = officer;
 }
 
-// Call updateOfficer on page load to set the initial officer
-document.addEventListener('DOMContentLoaded', updateOfficer);
-
-// Clear all data including unavailable staff
-// Clear only Page 2 data (roster and unavailable staff)
-async function clearAll() {
-    data.roster = {};
-    data.unavailable = {};
-    await saveData();
-    renderPage2();
-    showPopup('Page 2 data cleared in Firestore!');
-}
-
+// Check for duplicate staff assignments
 function getDuplicateStaff(date) {
     const roster = data.roster[date] || {};
     // Combine staff from A, (A), A2, P1, P2 for duplicate checking
@@ -931,3 +942,30 @@ function getDuplicateStaff(date) {
     return duplicates; // Returns lowercase names that are duplicated (excluding N with A/(A)/A2)
 }
 
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    auth.signInAnonymously().then(() => {
+        console.log('User signed in anonymously');
+        loadData();
+        setupRealtimeListener();
+    }).catch(error => {
+        console.error('Authentication error:', error);
+        showPopup('Failed to authenticate.');
+    });
+
+    goToPage(1); // Set step1 as active on load
+    document.getElementById('year').addEventListener('change', updateOfficer);
+    document.getElementById('month').addEventListener('change', updateOfficer);
+
+    // Add scroll event listener for scroll-to-top icon
+    window.addEventListener('scroll', () => {
+        const scrollToTopBtn = document.querySelector('.scroll-to-top');
+        if (scrollToTopBtn) {
+            if (window.scrollY > 100) { // Show when scrolled down 100px
+                scrollToTopBtn.classList.add('show');
+            } else {
+                scrollToTopBtn.classList.remove('show');
+            }
+        }
+    });
+});
