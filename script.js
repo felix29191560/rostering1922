@@ -1,20 +1,3 @@
-// Initialize Firebase
-const firebaseConfig = {
-    apiKey: "AIzaSyCe4HzQ3FXadF_drpR7XOyVQYIYi36L8KM",
-    authDomain: "rostering-1922.firebaseapp.com",
-    projectId: "rostering-1922",
-    storageBucket: "rostering-1922.firebasestorage.app",
-    messagingSenderId: "853988161908",
-    appId: "1:853988161908:web:ae269331b50b59dd271421"
-};
-
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const auth = firebase.auth();
-
-// Global roster ID for shared access
-let rosterId = prompt('Enter Roster ID (leave blank for default):') || `${new Date().getFullYear()}_0`;
-
 // Global data storage
 let data = {
     pool1: [],
@@ -22,7 +5,9 @@ let data = {
     year: new Date().getFullYear(),
     month: 0, // Default to January
     holidays: [],
-    unavailable: {}, // { date: { daytime: [names], evening: [names], al: [names] } }
+    unavailable: { // { date: { daytime: [names], evening: [names], al: [names] } }
+        // Example: '2025-9-1': { daytime: ['Alice'], evening: ['Bob'], al: ['Charlie'] }
+    },
     roster: {}, // { date: { shiftType: [staffNames] } }
 };
 
@@ -35,72 +20,26 @@ const monthNames = [
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-// Load saved data from Firestore
-async function loadData() {
-    try {
-        const docRef = db.collection('rosters').doc(rosterId);
-        const docSnap = await docRef.get();
-        const year = parseInt(document.getElementById('year').value) || new Date().getFullYear();
-        const month = parseInt(document.getElementById('month').value) || 0;
-        if (docSnap.exists) {
-            data = docSnap.data();
-            document.getElementById('pool1').value = data.pool1.join('\n');
-            document.getElementById('pool2').value = data.pool2.join('\n');
-            document.getElementById('year').value = data.year;
-            document.getElementById('month').value = data.month;
-            document.getElementById('holidays').value = (data.holidays || []).join('\n');
-        } else {
-            // Default data if no document exists
-            data = {
-                pool1: [],
-                pool2: [],
-                year: year,
-                month: month,
-                holidays: [],
-                unavailable: {},
-                roster: {}
-            };
-            document.getElementById('month').value = data.month;
-        }
-        renderPage2();
-        updateOfficer();
-    } catch (error) {
-        console.error('Error loading data:', error);
-        showPopup('Failed to load data from Firestore.');
+// Load saved data
+function loadData() {
+    const saved = localStorage.getItem('rosterData');
+    if (saved) {
+        data = JSON.parse(saved);
+        document.getElementById('pool1').value = data.pool1.join('\n');
+        document.getElementById('pool2').value = data.pool2.join('\n');
+        document.getElementById('year').value = data.year;
+        document.getElementById('month').value = data.month;
+        document.getElementById('holidays').value = (data.holidays || []).join('\n');
+    } else {
+        document.getElementById('month').value = data.month;
     }
+    renderPage2();
 }
 
-// Save data to Firestore
-async function saveData() {
-    try {
-        await db.collection('rosters').doc(rosterId).set(data);
-        updateSummaryWindow();
-        showPopup('Data saved to Firestore!');
-    } catch (error) {
-        console.error('Error saving data:', error);
-        showPopup('Failed to save data to Firestore.');
-    }
-}
-
-// Save Page 2 (called by Save button on Page 2)
-async function savePage2() {
-    await saveData();
-    showPopup('Page 2 saved to Firestore!');
-}
-
-// Real-time listener for roster updates
-function setupRealtimeListener() {
-    db.collection('rosters').doc(rosterId).onSnapshot(doc => {
-        if (doc.exists) {
-            data = doc.data();
-            renderPage2();
-            updateSummaryWindow();
-            showPopup('Roster updated in real-time!');
-        }
-    }, error => {
-        console.error('Error in real-time listener:', error);
-        showPopup('Failed to sync roster updates.');
-    });
+// Save data to local storage
+function saveData() {
+    localStorage.setItem('rosterData', JSON.stringify(data));
+    updateSummaryWindow(); // Update summary window if open
 }
 
 // Show pop-up message
@@ -139,16 +78,14 @@ function scrollToBottom() {
 }
 
 // Page 1: Save staff and month
-async function savePage1() {
+function savePage1() {
     const newYear = parseInt(document.getElementById('year').value) || new Date().getFullYear();
-    const newMonth = parseInt(document.getElementById('month').value) || 0;
+    const newMonth = parseInt(document.getElementById('month').value) || 0; // Default to January
 
-    // Update rosterId if year or month changes
+    // Clear unavailable and roster data if year or month changes
     if (newYear !== data.year || newMonth !== data.month) {
-        rosterId = prompt('Enter new Roster ID (leave blank for default):') || `${newYear}_${newMonth}`;
         data.unavailable = {};
         data.roster = {};
-        setupRealtimeListener(); // Reattach listener for new rosterId
     }
 
     data.pool1 = document.getElementById('pool1').value.trim().split('\n').filter(name => name.trim());
@@ -160,8 +97,9 @@ async function savePage1() {
         .map(s => s.trim())
         .filter(s => s);
 
-    await saveData();
+    saveData();
     renderPage2();
+    showPopup('Data saved!');
 }
 
 // Get week number for a date
@@ -285,11 +223,9 @@ function toggleAllUnavailable() {
     const unavailableSections = document.querySelectorAll('#calendar2 .unavailable');
     const button = document.querySelector('.toggle-all-unavailable');
     const allVisible = Array.from(unavailableSections).every(section => section.style.display !== 'none');
-
     unavailableSections.forEach(section => {
         section.style.display = allVisible ? 'none' : 'block';
     });
-
     button.textContent = allVisible ? 'Show Unavailable' : 'Hide Unavailable';
 }
 
@@ -405,7 +341,6 @@ function generateSummaryTable() {
                         <th>Total</th>
                     </tr>
     `;
-
     allStaff.forEach(staff => {
         let a = 0, a3 = 0, p1 = 0, p2 = 0, n = 0, sat = 0;
         Object.entries(data.roster).forEach(([date, day]) => {
@@ -428,10 +363,10 @@ function generateSummaryTable() {
     });
 
     html += `
-                </table>
-            </div>
-        </body>
-        </html>
+            </table>
+        </div>
+    </body>
+    </html>
     `;
 
     return html;
@@ -455,7 +390,7 @@ function updateSummaryWindow() {
     }
 }
 
-// Export roster to CSV
+// Export roster to Excel
 function exportToExcel() {
     const { year, month } = data;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -497,7 +432,7 @@ function exportToExcel() {
     let currentWeek = 1;
     for (let week = 1; week <= weeks; week++) {
         // Week dates row
-        const weekDates = ['Week ' + week, ...Array(7).fill().map((_, index) => {
+        const weekDates = ['Week ' + week, ...Array(7).map((_, index) => {
             if (index === 5) return ['', '', '', '']; // Four columns for Friday
             return ['', '', '']; // Three columns for other days
         }).flat()];
@@ -522,23 +457,23 @@ function exportToExcel() {
         csvRows.push(weekDates.map(cell => `"${cell}"`).join(','));
 
         // Shift rows (N, A, P1, P2, Unavailable)
-        const nRow = ['N', ...Array(7).fill().map((_, index) => {
+        const nRow = ['N', ...Array(7).map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
         }).flat()];
-        const aRow = ['A', ...Array(7).fill().map((_, index) => {
+        const aRow = ['A', ...Array(7).map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
         }).flat()];
-        const p1Row = ['P1', ...Array(7).fill().map((_, index) => {
+        const p1Row = ['P1', ...Array(7).map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
         }).flat()];
-        const p2Row = ['P2', ...Array(7).fill().map((_, index) => {
+        const p2Row = ['P2', ...Array(7).map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
         }).flat()];
-        const unavailableRow = ['Unavailable', ...Array(7).fill().map((_, index) => {
+        const unavailableRow = ['Unavailable', ...Array(7).map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
         }).flat()];
@@ -685,22 +620,6 @@ function exportToExcel() {
     document.body.removeChild(link);
 
     showPopup('CSV file exported!');
-
-    // Optional: SheetJS for .xlsx export (uncomment to use)
-    /*
-    const wb = XLSX.utils.book_new();
-    const wsData = [];
-    // Add headers
-    wsData.push(['', ...daysOfWeek.map(day => [day, '', day === 'Fri' ? ['', ''] : ['']).flat(), 'AL']);
-    // Convert csvRows to worksheet data
-    csvRows.forEach(row => {
-        wsData.push(row.split(',').map(cell => cell.replace(/^"|"$/g, '')));
-    });
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    XLSX.utils.book_append_sheet(wb, ws, `${monthNames[month]}_${year}`);
-    XLSX.writeFile(wb, `Roster_${monthNames[month]}_${year}.xlsx`);
-    showPopup('Excel file exported!');
-    */
 }
 
 // Generate roster
@@ -848,8 +767,8 @@ function generateRoster() {
             const validCandidates = finalCandidates.filter(s => {
                 const assignedShifts = data.roster[date] ? Object.values(data.roster[date]).flat() : [];
                 if (assignedShifts.some(as => as.toLowerCase() === s.toLowerCase())) {
-                    return (data.roster[date]['A']?.some(as => as.toLowerCase() === s.toLowerCase()) ||
-                            data.roster[date]['(A)']?.some(as => as.toLowerCase() === s.toLowerCase()) ||
+                    return (data.roster[date]['A']?.some(as => as.toLowerCase() === s.toLowerCase()) || 
+                            data.roster[date]['(A)']?.some(as => as.toLowerCase() === s.toLowerCase()) || 
                             data.roster[date]['A2']?.some(as => as.toLowerCase() === s.toLowerCase())) && shift === 'N';
                 }
                 if ((shift === 'P1' || shift === 'P2') && data.roster[date]['N']?.some(ns => ns.toLowerCase() === s.toLowerCase())) {
@@ -862,9 +781,9 @@ function generateRoster() {
             if (validCandidates.length > 0) {
                 const selected = validCandidates[Math.floor(Math.random() * validCandidates.length)];
                 data.roster[date][shift] = [selected];
-                if (shift !== 'N' || !data.roster[date]['A']?.some(as => as.toLowerCase() === selected.toLowerCase()) &&
-                    !data.roster[date]['(A)']?.some(as => as.toLowerCase() === selected.toLowerCase()) &&
-                    !data.roster[date]['A2']?.some(as => as.toLowerCase() === selected.toLowerCase())) {
+                if (shift !== 'N' || !data.roster[date]['A']?.some(as => as.toLowerCase() === selected.toLowerCase()) && 
+                    !data.roster[date]['(A)']?.some(as => as.toLowerCase() === s.toLowerCase()) && 
+                    !data.roster[date]['A2']?.some(as => as.toLowerCase() === s.toLowerCase())) {
                     availablePool1 = availablePool1.filter(s => s.toLowerCase() !== selected.toLowerCase());
                     availablePool2 = availablePool2.filter(s => s.toLowerCase() !== selected.toLowerCase());
                 }
@@ -883,24 +802,29 @@ function generateRoster() {
     }
 }
 
-// Clear only Page 2 data (roster and unavailable staff)
-async function clearAll() {
-    data.roster = {};
-    data.unavailable = {};
-    await saveData();
-    renderPage2();
-    showPopup('Page 2 data cleared in Firestore!');
-}
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadData();
+    goToPage(1); // Set step1 as active on load
+    updateOfficer(); // Set initial officer
 
-// Clear roster shifts only
-async function clearRoster() {
-    data.roster = {};
-    await saveData();
-    renderPage2();
-    showPopup('Roster shifts cleared!');
-}
+    // Add event listeners for year and month changes
+    document.getElementById('year').addEventListener('change', updateOfficer);
+    document.getElementById('month').addEventListener('change', updateOfficer);
 
-// Update officer based on month
+    // Add scroll event listener for scroll-to-top icon
+    window.addEventListener('scroll', () => {
+        const scrollToTopBtn = document.querySelector('.scroll-to-top');
+        if (scrollToTopBtn) {
+            if (window.scrollY > 100) { // Show when scrolled down 100px
+                scrollToTopBtn.classList.add('show');
+            } else {
+                scrollToTopBtn.classList.remove('show');
+            }
+        }
+    });
+});
+
 function updateOfficer() {
     const month = parseInt(document.getElementById('month').value);
     let officer = '';
@@ -934,7 +858,24 @@ function updateOfficer() {
     document.getElementById('officerName').textContent = officer;
 }
 
-// Check for duplicate staff assignments
+// Call updateOfficer on page load to set the initial officer
+document.addEventListener('DOMContentLoaded', updateOfficer);
+
+// Clear all data including unavailable staff
+// Clear only Page 2 data (roster and unavailable staff)
+function clearAll() {
+    // Reset only roster and unavailable data
+    data.roster = {};
+    data.unavailable = {};
+
+    // Save updated data to local storage
+    saveData();
+
+    // Update UI for Page 2
+    renderPage2(); // Refresh calendar and AL list
+    showPopup('Page 2 data cleared!');
+}
+
 function getDuplicateStaff(date) {
     const roster = data.roster[date] || {};
     // Combine staff from A, (A), A2, P1, P2 for duplicate checking
@@ -964,31 +905,3 @@ function getDuplicateStaff(date) {
 
     return duplicates; // Returns lowercase names that are duplicated (excluding N with A/(A)/A2)
 }
-
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    auth.signInAnonymously().then(() => {
-        console.log('User signed in anonymously');
-        loadData();
-        setupRealtimeListener();
-    }).catch(error => {
-        console.error('Authentication error:', error);
-        showPopup('Failed to authenticate.');
-    });
-
-    goToPage(1); // Set step1 as active on load
-    document.getElementById('year').addEventListener('change', updateOfficer);
-    document.getElementById('month').addEventListener('change', updateOfficer);
-
-    // Add scroll event listener for scroll-to-top icon
-    window.addEventListener('scroll', () => {
-        const scrollToTopBtn = document.querySelector('.scroll-to-top');
-        if (scrollToTopBtn) {
-            if (window.scrollY > 100) { // Show when scrolled down 100px
-                scrollToTopBtn.classList.add('show');
-            } else {
-                scrollToTopBtn.classList.remove('show');
-            }
-        }
-    });
-});
