@@ -1,11 +1,11 @@
 // Initialize Firebase
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyCe4HzQ3FXadF_drpR7XOyVQYIYi36L8KM",
+    authDomain: "rostering-1922.firebaseapp.com",
+    projectId: "rostering-1922",
+    storageBucket: "rostering-1922.firebasestorage.app",
+    messagingSenderId: "853988161908",
+    appId: "1:853988161908:web:ae269331b50b59dd271421"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -22,7 +22,8 @@ let data = {
     year: new Date().getFullYear(),
     month: 0, // Default to January
     holidays: [],
-    unavailablekommer: {}, // { date: { shiftType: [staffNames] } }
+    unavailable: {}, // { date: { daytime: [names], evening: [names], al: [names] } }
+    roster: {}, // { date: { shiftType: [staffNames] } }
 };
 
 // Reference to summary window
@@ -79,6 +80,12 @@ async function saveData() {
         console.error('Error saving data:', error);
         showPopup('Failed to save data to Firestore.');
     }
+}
+
+// Save Page 2 (called by Save button on Page 2)
+async function savePage2() {
+    await saveData();
+    showPopup('Page 2 saved to Firestore!');
 }
 
 // Real-time listener for roster updates
@@ -678,6 +685,22 @@ function exportToExcel() {
     document.body.removeChild(link);
 
     showPopup('CSV file exported!');
+
+    // Optional: SheetJS for .xlsx export (uncomment to use)
+    /*
+    const wb = XLSX.utils.book_new();
+    const wsData = [];
+    // Add headers
+    wsData.push(['', ...daysOfWeek.map(day => [day, '', day === 'Fri' ? ['', ''] : ['']).flat(), 'AL']);
+    // Convert csvRows to worksheet data
+    csvRows.forEach(row => {
+        wsData.push(row.split(',').map(cell => cell.replace(/^"|"$/g, '')));
+    });
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    XLSX.utils.book_append_sheet(wb, ws, `${monthNames[month]}_${year}`);
+    XLSX.writeFile(wb, `Roster_${monthNames[month]}_${year}.xlsx`);
+    showPopup('Excel file exported!');
+    */
 }
 
 // Generate roster
