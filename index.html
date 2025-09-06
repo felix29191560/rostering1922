@@ -6,8 +6,7 @@
     <title>Rostering</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" type="image/x-icon" href="icon.png">
-
-    <!-- SheetJS CDN -->
+    <!-- SheetJS CDN for potential Excel export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -62,16 +61,6 @@
         <!-- Page 2: Roster and AL list -->
         <div id="page2" class="page" style="display: none;">
             <h1>Roster</h1>
-            <div class="button-group">
-                <button class="previous2" onclick="goToPage(1)">Back</button>
-                <button class="save" onclick="savePage2()">Save</button>
-                <button class="generate" onclick="generateRoster()">Generate</button>
-                <button class="toggle-all-unavailable" onclick="toggleAllUnavailable()">Show Unavailable</button>
-                <button class="clear" onclick="clearRoster()">Clear Shift</button>
-                <button class="clear-all" onclick="clearAll()">Clear All</button>
-                <button class="summary-button" onclick="showSummary()">Show Summary</button>
-                <button class="export-button" onclick="exportToExcel()">Export to Excel</button>
-            </div>
             <div class="month-year-display" id="page2-month-year"></div>
             <div class="roster-container">
                 <div id="calendar2"></div>
@@ -87,33 +76,14 @@
                 <button class="summary-button" onclick="showSummary()">Show Summary</button>
                 <button class="export-button" onclick="exportToExcel()">Export to Excel</button>
             </div>
-        
             <div class="scroll-to-top" onclick="scrollToTop()">↑</div>
         </div>
     </div>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"></script>
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
 
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyCe4HzQ3FXadF_drpR7XOyVQYIYi36L8KM",
-    authDomain: "rostering-1922.firebaseapp.com",
-    projectId: "rostering-1922",
-    storageBucket: "rostering-1922.firebasestorage.app",
-    messagingSenderId: "853988161908",
-    appId: "1:853988161908:web:ae269331b50b59dd271421"
-  };
-// Initialize Firebase app and Firestore
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-</script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
