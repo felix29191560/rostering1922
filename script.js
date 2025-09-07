@@ -1,3 +1,5 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+
 // Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCe4HzQ3FXadF_drpR7XOyVQYIYi36L8KM",
@@ -7,6 +9,8 @@ const firebaseConfig = {
   messagingSenderId: "853988161908",
   appId: "1:853988161908:web:ae269331b50b59dd271421"
 };
+
+const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase
 let db;
