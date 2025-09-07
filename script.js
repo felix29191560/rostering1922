@@ -1,3 +1,17 @@
+// Firebase configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyCe4HzQ3FXadF_drpR7XOyVQYIYi36L8KM",
+    authDomain: "rostering-1922.firebaseapp.com",
+    projectId: "rostering-1922",
+    storageBucket: "rostering-1922.firebasestorage.app",
+    messagingSenderId: "853988161908",
+    appId: "1:853988161908:web:ae269331b50b59dd271421"
+};
+
+// Initialize Firebase
+const app = firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
 // Global data storage
 let data = {
     pool1: [],
@@ -21,25 +35,96 @@ const monthNames = [
 ];
 
 // Load saved data
-function loadData() {
-    const saved = localStorage.getItem('rosterData');
-    if (saved) {
-        data = JSON.parse(saved);
+async function loadData() {
+    const year = parseInt(document.getElementById('year').value) || new Date().getFullYear();
+    const month = parseInt(document.getElementById('month').value) || 0;
+
+    try {
+        // Load pool1, pool2, and holidays from Firestore
+        const configDoc = await db.collection('global_config').doc('staff_pools').get();
+        if (configDoc.exists) {
+            const configData = configDoc.data();
+            data.pool1 = configData.pool1 || [];
+            data.pool2 = configData.pool2 || [];
+            data.holidays = configData.holidays || [];
+        } else {
+            // Default values if no Firestore data exists
+            data.pool1 = [];
+            data.pool2 = [];
+            data.holidays = [];
+        }
+
+        // Set up real-time listener for Firestore updates
+        db.collection('global_config').doc('staff_pools').onSnapshot(doc => {
+            if (doc.exists) {
+                const configData = doc.data();
+                data.pool1 = configData.pool1 || [];
+                data.pool2 = configData.pool2 || [];
+                data.holidays = configData.holidays || [];
+                document.getElementById('pool1').value = data.pool1.join('\n');
+                document.getElementById('pool2').value = data.pool2.join('\n');
+                document.getElementById('holidays').value = data.holidays.join('\n');
+                renderPage2();
+            }
+        }, error => {
+            console.error('Error in Firestore listener:', error);
+            showPopup('Failed to sync data!');
+        });
+
+        // Load roster and unavailable from localStorage
+        const saved = localStorage.getItem('rosterData');
+        if (saved) {
+            const localData = JSON.parse(saved);
+            data.roster = localData.roster || {};
+            data.unavailable = localData.unavailable || {};
+            data.year = localData.year || year;
+            data.month = localData.month || month;
+        } else {
+            data.roster = {};
+            data.unavailable = {};
+            data.year = year;
+            data.month = month;
+        }
+
+        // Update form fields
         document.getElementById('pool1').value = data.pool1.join('\n');
         document.getElementById('pool2').value = data.pool2.join('\n');
         document.getElementById('year').value = data.year;
         document.getElementById('month').value = data.month;
-        document.getElementById('holidays').value = (data.holidays || []).join('\n');
-    } else {
-        document.getElementById('month').value = data.month;
+        document.getElementById('holidays').value = data.holidays.join('\n');
+
+        renderPage2();
+        updateOfficer();
+    } catch (error) {
+        console.error('Error loading data from Firestore:', error);
+        showPopup('Failed to load data!');
     }
-    renderPage2();
 }
 
-// Save data to local storage
-function saveData() {
-    localStorage.setItem('rosterData', JSON.stringify(data));
-    updateSummaryWindow(); // Update summary window if open
+// Save data to Firestore and localStorage
+async function saveData() {
+    try {
+        // Save pool1, pool2, and holidays to Firestore
+        await db.collection('global_config').doc('staff_pools').set({
+            pool1: data.pool1,
+            pool2: data.pool2,
+            holidays: data.holidays
+        });
+
+        // Save roster, unavailable, year, and month to localStorage
+        const localData = {
+            roster: data.roster,
+            unavailable: data.unavailable,
+            year: data.year,
+            month: data.month
+        };
+        localStorage.setItem('rosterData', JSON.stringify(localData));
+
+        updateSummaryWindow();
+    } catch (error) {
+        console.error('Error saving data to Firestore:', error);
+        showPopup('Failed to save data!');
+    }
 }
 
 // Show pop-up message
@@ -78,28 +163,73 @@ function scrollToBottom() {
 }
 
 // Page 1: Save staff and month
-function savePage1() {
+async function savePage1() {
     const newYear = parseInt(document.getElementById('year').value) || new Date().getFullYear();
-    const newMonth = parseInt(document.getElementById('month').value) || 0; // Default to January
+    const newMonth = parseInt(document.getElementById('month').value) || 0;
 
-    // Clear unavailable and roster data if year or month changes
+    // Validate inputs
+    const pool1 = document.getElementById('pool1').value.trim().split('\n').filter(name => name.trim());
+    const pool2 = document.getElementById('pool2').value.trim().split('\n').filter(name => name.trim());
+    const holidays = document.getElementById('holidays').value
+        .split(/[\n,]+/)
+        .map(s => s.trim())
+        .filter(s => s)
+        .filter(s => /^\d{4}-\d{1,2}-\d{1,2}$/.test(s)); // Validate YYYY-M-D format
+
+    if (pool1.length === 0 || pool2.length === 0) {
+        showPopup('Please enter at least one staff member in each pool!');
+        return;
+    }
+    if (holidays.some(date => !isValidDate(date))) {
+        showPopup('Invalid holiday date format! Use YYYY-M-D.');
+        return;
+    }
+
+    // Clear roster and unavailable data if year or month changes
     if (newYear !== data.year || newMonth !== data.month) {
         data.unavailable = {};
         data.roster = {};
     }
 
-    data.pool1 = document.getElementById('pool1').value.trim().split('\n').filter(name => name.trim());
-    data.pool2 = document.getElementById('pool2').value.trim().split('\n').filter(name => name.trim());
+    data.pool1 = pool1;
+    data.pool2 = pool2;
     data.year = newYear;
     data.month = newMonth;
-    data.holidays = document.getElementById('holidays').value
-        .split(/[\n,]+/)
-        .map(s => s.trim())
-        .filter(s => s);
+    data.holidays = holidays;
 
-    saveData();
+    await saveData();
     renderPage2();
     showPopup('Data saved!');
+}
+
+// Validate date format (YYYY-M-D)
+function isValidDate(dateStr) {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+// Page 2: Save roster and unavailable (same as clearAll, updates localStorage)
+function savePage2() {
+    saveData();
+    showPopup('Page 2 data saved!');
+}
+
+// Clear only roster data (not unavailable)
+function clearRoster() {
+    data.roster = {};
+    saveData();
+    renderPage2();
+    showPopup('Roster cleared!');
+}
+
+// Clear all Page 2 data (roster and unavailable)
+function clearAll() {
+    data.roster = {};
+    data.unavailable = {};
+    saveData();
+    renderPage2();
+    showPopup('Page 2 data cleared!');
 }
 
 // Get week number for a date
@@ -802,29 +932,7 @@ function generateRoster() {
     }
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    loadData();
-    goToPage(1); // Set step1 as active on load
-    updateOfficer(); // Set initial officer
-
-    // Add event listeners for year and month changes
-    document.getElementById('year').addEventListener('change', updateOfficer);
-    document.getElementById('month').addEventListener('change', updateOfficer);
-
-    // Add scroll event listener for scroll-to-top icon
-    window.addEventListener('scroll', () => {
-        const scrollToTopBtn = document.querySelector('.scroll-to-top');
-        if (scrollToTopBtn) {
-            if (window.scrollY > 100) { // Show when scrolled down 100px
-                scrollToTopBtn.classList.add('show');
-            } else {
-                scrollToTopBtn.classList.remove('show');
-            }
-        }
-    });
-});
-
+// Update responsible officer based on month
 function updateOfficer() {
     const month = parseInt(document.getElementById('month').value);
     let officer = '';
@@ -858,24 +966,7 @@ function updateOfficer() {
     document.getElementById('officerName').textContent = officer;
 }
 
-// Call updateOfficer on page load to set the initial officer
-document.addEventListener('DOMContentLoaded', updateOfficer);
-
-// Clear all data including unavailable staff
-// Clear only Page 2 data (roster and unavailable staff)
-function clearAll() {
-    // Reset only roster and unavailable data
-    data.roster = {};
-    data.unavailable = {};
-
-    // Save updated data to local storage
-    saveData();
-
-    // Update UI for Page 2
-    renderPage2(); // Refresh calendar and AL list
-    showPopup('Page 2 data cleared!');
-}
-
+// Get duplicate staff for a date
 function getDuplicateStaff(date) {
     const roster = data.roster[date] || {};
     // Combine staff from A, (A), A2, P1, P2 for duplicate checking
@@ -905,3 +996,26 @@ function getDuplicateStaff(date) {
 
     return duplicates; // Returns lowercase names that are duplicated (excluding N with A/(A)/A2)
 }
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadData();
+    goToPage(1); // Set step1 as active on load
+    updateOfficer(); // Set initial officer
+
+    // Add event listeners for year and month changes
+    document.getElementById('year').addEventListener('change', updateOfficer);
+    document.getElementById('month').addEventListener('change', updateOfficer);
+
+    // Add scroll event listener for scroll-to-top icon
+    window.addEventListener('scroll', () => {
+        const scrollToTopBtn = document.querySelector('.scroll-to-top');
+        if (scrollToTopBtn) {
+            if (window.scrollY > 100) { // Show when scrolled down 100px
+                scrollToTopBtn.classList.add('show');
+            } else {
+                scrollToTopBtn.classList.remove('show');
+            }
+        }
+    });
+});
