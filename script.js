@@ -1,11 +1,11 @@
 // Firebase configuration
 const firebaseConfig = {
-    apiKey: "AIzaSyCe4HzQ3FXadF_drpR7XOyVQYIYi36L8KM",
-    authDomain: "rostering-1922.firebaseapp.com",
-    projectId: "rostering-1922",
-    storageBucket: "rostering-1922.firebasestorage.app",
-    messagingSenderId: "853988161908",
-    appId: "1:853988161908:web:ae269331b50b59dd271421"
+  apiKey: "AIzaSyCe4HzQ3FXadF_drpR7XOyVQYIYi36L8KM",
+  authDomain: "rostering-1922.firebaseapp.com",
+  projectId: "rostering-1922",
+  storageBucket: "rostering-1922.firebasestorage.app",
+  messagingSenderId: "853988161908",
+  appId: "1:853988161908:web:ae269331b50b59dd271421"
 };
 
 // Initialize Firebase
