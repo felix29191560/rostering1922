@@ -53,7 +53,7 @@
             </select>
             <div id="officer">Responsible Officer: <span id="officerName"></span></div>
             <br>
-            <label for="holidays">Holidays (yyyy-m-d; line separated):</label>
+            <label for="holidays">Holidays:</label>
             <textarea id="holidays" rows="2" placeholder="YYYY-M-D, e.g. 2025-9-15"></textarea>
             <div class="button-group">
                 <button class="next" onclick="goToPage(2)">Next</button>
@@ -64,6 +64,7 @@
         <!-- Page 2: Roster and AL list -->
         <div id="page2" class="page" style="display: none;">
             <h1>Roster</h1>
+            
             <div class="button-group">
                 <button class="previous2" onclick="goToPage(1)">Back</button>
                 <button class="save" onclick="savePage2()">Save</button>
@@ -83,15 +84,17 @@
                 <button class="previous2" onclick="goToPage(1)">Back</button>
                 <button class="save" onclick="savePage2()">Save</button>
                 <button class="generate" onclick="generateRoster()">Generate</button>
-                <button class="toggle-all-unavailable" onclick="toggleAllUnavailable()">Hide Unavailable</button>
+                <button class="toggle-all-unavailable" onclick="toggleAllUnavailable()">Show Unavailable</button>
                 <button class="clear" onclick="clearRoster()">Clear Shift</button>
                 <button class="clear-all" onclick="clearAll()">Clear All</button>
                 <button class="summary-button" onclick="showSummary()">Show Summary</button>
                 <button class="export-button" onclick="exportToExcel()">Export to Excel</button>
             </div>
             <div class="scroll-to-top" onclick="scrollToTop()">↑</div>
+            
         </div>
     </div>
+    <p style="font-family: Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;font-weight: bolder;font-style: italic;">All right reserved; by Felix Li Version date: 2025-9-7</p>
     <script src="script.js"></script>
 </body>
 </html>

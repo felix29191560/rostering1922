@@ -1,11 +1,11 @@
 // Firebase configuration (replace with your Firebase project config)
 const firebaseConfig = {
-  apiKey: "AIzaSyBKRzoXYwquXECuww0SXWFNZrdie3lHZ24",
-  authDomain: "roster1922.firebaseapp.com",
-  projectId: "roster1922",
-  storageBucket: "roster1922.firebasestorage.app",
-  messagingSenderId: "416706925052",
-  appId: "1:416706925052:web:9d429c295e1c3df079a279"
+    apiKey: "AIzaSyBKRzoXYwquXECuww0SXWFNZrdie3lHZ24",
+    authDomain: "roster1922.firebaseapp.com",
+    projectId: "roster1922",
+    storageBucket: "roster1922.firebasestorage.app",
+    messagingSenderId: "416706925052",
+    appId: "1:416706925052:web:9d429c295e1c3df079a279"
 };
 
 // Initialize Firebase
@@ -13,7 +13,7 @@ let db;
 try {
     const app = firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
-    console.log('Firestore initialized:', db); // Debug
+    console.log('Firestore initialized:', db);
 } catch (error) {
     console.error('Firebase initialization failed:', error);
     showPopup('Failed to connect to database! Using local data.');
@@ -24,12 +24,12 @@ let data = {
     pool1: [],
     pool2: [],
     year: new Date().getFullYear(),
-    month: 0, // Default to January
+    month: 0,
     holidays: [],
     unavailable: {},
-    roster: {}
+    roster: {},
+    fixedAssignments: {} // Store fixed assignments per date and shift
 };
-console.log('Initial data:', data); // Debug
 
 // Reference to summary window
 let summaryWindow = null;
@@ -78,17 +78,19 @@ async function loadData() {
             });
         }
 
-        // Load roster, unavailable, year, and month from localStorage
+        // Load roster, unavailable, year, month, and fixedAssignments from localStorage
         const saved = localStorage.getItem('rosterData');
         if (saved) {
             const localData = JSON.parse(saved);
             data.roster = localData.roster || {};
             data.unavailable = localData.unavailable || {};
+            data.fixedAssignments = localData.fixedAssignments || {};
             data.year = localData.year || year;
             data.month = localData.month || month;
         } else {
             data.roster = {};
             data.unavailable = {};
+            data.fixedAssignments = {};
             data.year = year;
             data.month = month;
         }
@@ -178,6 +180,7 @@ async function savePage1() {
     if (newYear !== data.year || newMonth !== data.month) {
         data.unavailable = {};
         data.roster = {};
+        data.fixedAssignments = {};
     }
 
     data.year = newYear;
@@ -185,30 +188,33 @@ async function savePage1() {
 
     await saveData();
     renderPage2();
-    showPopup('Data saved!');
+    showPopup('Saved Successfully!');
 }
 
 // Page 2: Save roster and unavailable
 function savePage2() {
     saveData();
-    showPopup('Page 2 data saved!');
+    showPopup('Saved Successfully!');
 }
 
-// Clear only roster data
+// Clear roster and fixed assignments
 function clearRoster() {
     data.roster = {};
+    data.fixedAssignments = {};
     saveData();
     renderPage2();
-    showPopup('Roster cleared!');
+    showPopup('Roster Cleared!');
+    console.log('After clearRoster:', { roster: data.roster, fixedAssignments: data.fixedAssignments });
 }
 
 // Clear all Page 2 data
 function clearAll() {
     data.roster = {};
     data.unavailable = {};
+    data.fixedAssignments = {};
     saveData();
     renderPage2();
-    showPopup('Page 2 data cleared!');
+    showPopup('All Cleared!');
 }
 
 // Get week number for a date
@@ -222,7 +228,7 @@ function getWeekNumber(year, month, day) {
 
 // Page 2: Render roster calendar and AL list
 function renderPage2() {
-    console.log('Rendering Page 2 with data:', data); // Debug
+    console.log('Rendering Page 2 with data:', data);
     const calendar = document.getElementById('calendar2');
     const alList = document.getElementById('al-list');
     const monthYearDisplay = document.getElementById('page2-month-year');
@@ -243,7 +249,7 @@ function renderPage2() {
         const weeks = Math.ceil((daysInMonth + firstDay) / 7);
         const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-        console.log('Calendar params:', { year, month, daysInMonth, firstDay, weeks }); // Debug
+        console.log('Calendar params:', { year, month, daysInMonth, firstDay, weeks });
 
         for (let week = 1; week <= weeks; week++) {
             const weekDiv = document.createElement('div');
@@ -268,6 +274,7 @@ function renderPage2() {
 
                     const duplicates = getDuplicateStaff(date);
                     const roster = data.roster[date] || {};
+                    const fixed = data.fixedAssignments[date] || {};
 
                     let html = `<div class="day-header${isSunday ? ' sunday' : ''}">${dayIndex} (${weekday})</div>`;
                     if (isHoliday) {
@@ -277,31 +284,31 @@ function renderPage2() {
                     } else {
                         html += `<div class="shifts" style="display:flex;flex-direction:column;gap:4px;">`;
                         if (isSaturday) {
-                            const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                            const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['A'] ? 'color:#007bff;font-weight:bold;' : '';
+                            const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['(A)'] ? 'color:#007bff;font-weight:bold;' : '';
                             html += `<div style="flex:0.5;"><b>A</b>: <input type="text" style="${aStyle}" value="${(roster['A'] || []).join(', ')}" onchange="updateRoster('${date}', 'A', this.value)"></div>`;
                             html += `<div style="flex:0.5;"><b>(A)</b>: <input type="text" style="${a3Style}" value="${(roster['(A)'] || []).join(', ')}" onchange="updateRoster('${date}', '(A)', this.value)"></div>`;
                         } else if (isFriday) {
-                            const nStyle = roster['N']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                            const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                            const a2Style = roster['A2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                            const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                            const p1Style = roster['P1']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                            const p2Style = roster['P2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const nStyle = roster['N']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['N'] ? 'color:#007bff;font-weight:bold;' : '';
+                            const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['A'] ? 'color:#007bff;font-weight:bold;' : '';
+                            const a2Style = roster['A2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['A2'] ? 'color:#007bff;font-weight:bold;' : '';
+                            const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['(A)'] ? 'color:#007bff;font-weight:bold;' : '';
+                            const p1Style = roster['P1']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['P1'] ? 'color:#007bff;font-weight:bold;' : '';
+                            const p2Style = roster['P2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['P2'] ? 'color:#007bff;font-weight:bold;' : '';
                             html += `<div style="flex:1;"><b>N</b>: <input type="text" style="${nStyle}" value="${(roster['N'] || []).join(', ')}" onchange="updateRoster('${date}', 'N', this.value)"></div>`;
                             html += `<div style="display:flex;gap:4px;">`;
                             html += `<div style="flex:0.33;"><b>A</b>: <input type="text" style="${aStyle}" value="${(roster['A'] || []).join(', ')}" onchange="updateRoster('${date}', 'A', this.value)"></div>`;
-                            html += `<div style="flex:0.33;"><b class="a2-label">A</b>: <input type="text" style="${a2Style}" value="${(roster['A2'] || []).join(', ')}" onchange="updateRoster('${date}', 'A2', this.value)"></div>`;
+                            html += `<div style="flex:0.33;"><b>A2</b>: <input type="text" style="${a2Style}" value="${(roster['A2'] || []).join(', ')}" onchange="updateRoster('${date}', 'A2', this.value)"></div>`;
                             html += `<div style="flex:0.33;"><b>(A)</b>: <input type="text" style="${a3Style}" value="${(roster['(A)'] || []).join(', ')}" onchange="updateRoster('${date}', '(A)', this.value)"></div>`;
                             html += `</div>`;
                             html += `<div style="flex:1;"><b>P1</b>: <input type="text" style="${p1Style}" value="${(roster['P1'] || []).join(', ')}" onchange="updateRoster('${date}', 'P1', this.value)"></div>`;
                             html += `<div style="flex:1;"><b>P2</b>: <input type="text" style="${p2Style}" value="${(roster['P2'] || []).join(', ')}" onchange="updateRoster('${date}', 'P2', this.value)"></div>`;
                         } else {
-                            const nStyle = roster['N']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                            const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                            const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                            const p1Style = roster['P1']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                            const p2Style = roster['P2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const nStyle = roster['N']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['N'] ? 'color:#007bff;font-weight:bold;' : '';
+                            const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['A'] ? 'color:#007bff;font-weight:bold;' : '';
+                            const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['(A)'] ? 'color:#007bff;font-weight:bold;' : '';
+                            const p1Style = roster['P1']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['P1'] ? 'color:#007bff;font-weight:bold;' : '';
+                            const p2Style = roster['P2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : fixed['P2'] ? 'color:#007bff;font-weight:bold;' : '';
                             html += `<div style="flex:1;"><b>N</b>: <input type="text" style="${nStyle}" value="${(roster['N'] || []).join(', ')}" onchange="updateRoster('${date}', 'N', this.value)"></div>`;
                             html += `<div style="display:flex;gap:4px;">`;
                             html += `<div style="flex:0.5;"><b>A</b>: <input type="text" style="${aStyle}" value="${(roster['A'] || []).join(', ')}" onchange="updateRoster('${date}', 'A', this.value)"></div>`;
@@ -316,6 +323,11 @@ function renderPage2() {
                         html += `<div>Unavailable(Evening): <textarea class="unavailable-input" rows="2" onchange="updateUnavailable('${date}', 'evening', this.value)">${(data.unavailable[date]?.evening || []).join('\n')}</textarea></div>`;
                         html += `<div>AL: <textarea class="unavailable-input" rows="2" onchange="updateUnavailable('${date}', 'al', this.value)">${(data.unavailable[date]?.al || []).join('\n')}</textarea></div>`;
                         html += `</div>`;
+                        html += `<button class="fix-date-button" onclick="fixDateAssignments('${date}')">Fix</button>`;
+                        html += `<br>`;
+                        html += `<button class="clear-shift-button" onclick="clearShift('${date}')">Clear Shift</button>`;
+                        html += `<button class="clear-all-button" onclick="clearAllForDate('${date}')">Clear All</button>`;
+                        
                     }
                     div.innerHTML = html;
                 }
@@ -336,17 +348,6 @@ function renderPage2() {
     }
 }
 
-// Toggle all unavailability sections visibility
-function toggleAllUnavailable() {
-    const unavailableSections = document.querySelectorAll('#calendar2 .unavailable');
-    const button = document.querySelector('.toggle-all-unavailable');
-    const allVisible = Array.from(unavailableSections).every(section => section.style.display !== 'none');
-    unavailableSections.forEach(section => {
-        section.style.display = allVisible ? 'none' : 'block';
-    });
-    button.textContent = allVisible ? 'Show Unavailable' : 'Hide Unavailable';
-}
-
 // Update roster data
 function updateRoster(date, shift, value) {
     try {
@@ -354,6 +355,7 @@ function updateRoster(date, shift, value) {
         data.roster[date][shift] = value.trim().split(',').map(s => s.trim()).filter(s => s);
         saveData();
         renderALList();
+        renderPage2();
     } catch (error) {
         console.error('Error updating roster:', error);
         showPopup('Failed to update roster!');
@@ -401,9 +403,37 @@ function renderALList() {
     alList.innerHTML = html;
 }
 
+// Fix assignments for a specific date
+function fixDateAssignments(date) {
+    try {
+        const roster = data.roster[date] || {};
+        const fixedAssignments = {};
+
+        Object.keys(roster).forEach(shift => {
+            const staffList = roster[shift] || [];
+            if (staffList.length > 0) {
+                fixedAssignments[shift] = staffList;
+            }
+        });
+
+        if (Object.keys(fixedAssignments).length > 0) {
+            data.fixedAssignments[date] = fixedAssignments;
+            saveData();
+            showPopup(`Fixed for ${date}!`);
+            console.log(`Fixed assignments for ${date}:`, fixedAssignments);
+            renderPage2();
+        } else {
+            showPopup(`No assignments to fix for ${date}.`);
+        }
+    } catch (error) {
+        console.error('Error fixing assignments:', error);
+        showPopup('Failed to fix assignments!');
+    }
+}
+
 // Generate summary table HTML
 function generateSummaryTable() {
-    const allStaff = [...new Set([...data.pool1, ...data.pool2])];
+    const allStaff = [...new Set([...data.pool1, ...data.pool2, ...Object.values(data.roster).flatMap(day => Object.values(day).flat())])];
     let html = `
         <!DOCTYPE html>
         <html lang="en">
@@ -412,43 +442,51 @@ function generateSummaryTable() {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Summary Table</title>
             <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    margin: 0;
-                    padding: 20px;
-                    background-color: #f4f4f4;
-                }
-                .summary-window {
-                    padding: 20px;
-                    background: white;
-                    margin: auto;
-                    border-radius: 8px;
-                    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-                    overflow-x: auto;
-                }
-                .summary-window h2 {
-                    margin-top: 0;
-                    color: #333;
-                }
-                .summary-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    font-size: 14px;
-                }
-                .summary-table th, .summary-table td {
-                    border: 1px solid #ccc;
-                    padding: 8px;
-                    text-align: center;
-                    white-space: nowrap;
-                }
-                .summary-table th:first-child, .summary-table td:first-child {
-                    position: sticky;
-                    left: 0;
-                    background: #fff;
-                    z-index: 1;
-                    border-right: 2px solid #ccc;
-                }
-            </style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f4f4; }
+                .summary-window { padding: 20px; background: white; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); overflow-x: auto; }
+                .summary-window h2 { margin-top: 0; color: #333; }
+                .summary-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+                .summary-table th, .summary-table td { border: 1px solid #ccc; padding: 8px; text-align: center; white-space: nowrap; }
+                .summary-table th:first-child, .summary-table td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; border-right: 2px solid #ccc; }
+                /* Style for the shift timings table */
+.shift-timings {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    margin: 10px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+    font-size: 16px;
+    width: 100%
+}
+
+.shift-timings th,
+.shift-timings td {
+    border: 1px solid #ccc;
+    padding: 5px;
+    text-align: center;
+}
+
+.shift-timings th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+}
+
+.shift-timings td:empty {
+    background-color: #f9f9f9;
+}
+
+/* Ensure calendar content stays below the table */
+#calendar2 {
+    position: relative;
+    min-height: 400px; /* Ensure enough space for the table and calendar */
+}
+            
+                </style>
         </head>
         <body>
             <div class="summary-window">
@@ -474,7 +512,6 @@ function generateSummaryTable() {
         Object.entries(data.roster).forEach(([date, day]) => {
             const d = new Date(date);
             if (day['A']?.includes(staff)) a++;
-            if (day['A2']?.includes(staff)) a++;
             if (day['(A)']?.includes(staff)) a3++;
             if (day['P1']?.includes(staff)) p1++;
             if (day['P2']?.includes(staff)) p2++;
@@ -491,12 +528,101 @@ function generateSummaryTable() {
     });
 
     html += `
+                </table>
+            </div>
+            <div id="calendar2">
+            <!-- Shift Timings Table -->
+            <table class="shift-timings">
+                <thead>
+                    <tr>
+                        <th>Shift</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Lunch time</th>
+                        <th>Lunch end</th>
+                        <th>From</th>
+                        <th>To</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>A</td>
+                        <td>9:00</td>
+                        <td>12:30</td>
+                        <td>12:30</td>
+                        <td>13:30</td>
+                        <td>13:30</td>
+                        <td>17:33</td>
+                        
+                    </tr>
+                    <tr>
+                        <td>(A)</td>
+                        <td>9:00</td>
+                        <td>10:45</td>
+                        <td>12:30</td>
+                        <td>13:30</td>
+                        <td>14:30</td>
+                        <td>15:30</td>
+                        
+                    </tr>
+                    <tr>
+                        <td>A</td>
+                        <td>9:00</td>
+                        <td>12:30</td>
+                        <td>12:30</td>
+                        <td>13:30</td>
+                        <td></td>
+                        <td></td>
+                        
+                    </tr>
+                    <tr>
+                        <td>P1</td>
+                        <td>10:45</td>
+                        <td>14:30</td>
+                        <td>14:30</td>
+                        <td>15:30</td>
+                        <td>15:30</td>
+                        <td>19:33</td>
+                        
+                    </tr>
+                    <tr>
+                        <td>P2</td>
+                        <td>12:30</td>
+                        <td>13:30</td>
+                        <td>14:30</td>
+                        <td>15:30</td>
+                        <td>17:33</td>
+                        <td>19:33</td>
+                        
+                    </tr>
+                    <tr>
+                        <td>N</td>
+                        <td>18:30</td>
+                        <td>22:30</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                       
+                    </tr>
+                    <tr>
+                        <td>Sat</td>
+                        <td>9:00</td>
+                        <td>12:00</td>
+                        <td>12:00</td>
+                        <td>13:00</td>
+                        <td>13:00</td>
+                        <td>19:00</td>
+                        
+                    </tr>
+                </tbody>
             </table>
+            <!-- Calendar content will be rendered here by JavaScript -->
         </div>
-    </body>
-    </html>
+            </tbody>
+        </body>
+        </html>
     `;
-
     return html;
 }
 
@@ -528,9 +654,7 @@ function exportToExcel() {
 
     let csvRows = [];
     const headerRow = ['', ...daysOfWeek.map((day, index) => {
-        if (day === 'Fri') {
-            return ['Fri', '', '', ''];
-        }
+        if (day === 'Fri') return ['Fri', '', '', ''];
         return [day, '', ''];
     }).flat(), 'AL'];
     csvRows.push(headerRow.map(cell => `"${cell}"`).join(','));
@@ -653,11 +777,16 @@ function exportToExcel() {
                 }
             } else {
                 const roster = data.roster[date] || {};
+                const unavailable = [
+                    ...(data.unavailable[date]?.daytime || []).map(name => `${name}(D)`),
+                    ...(data.unavailable[date]?.evening || []).map(name => `${name}(E)`)
+                ].filter((name, index, self) => self.indexOf(name) === index).join(', ');
+                
                 if (dayOfWeek !== 5) {
                     nRow[colIndex] = (roster['N'] || []).join(', ');
                     nRow[colIndex + 1] = '';
                     nRow[colIndex + 2] = '';
-                    aRow[colIndex] = ([...(roster['A'] || []), ...(roster['A2'] || [])]).join(', ');
+                    aRow[colIndex] = ([...(roster['A'] || [])]).join(', ');
                     aRow[colIndex + 1] = roster['A']?.length || roster['(A)']?.length ? '+' : '';
                     aRow[colIndex + 2] = (roster['(A)'] || []).join(', ');
                     p1Row[colIndex] = (roster['P1'] || []).join(', ');
@@ -666,7 +795,6 @@ function exportToExcel() {
                     p2Row[colIndex] = (roster['P2'] || []).join(', ');
                     p2Row[colIndex + 1] = '';
                     p2Row[colIndex + 2] = '';
-                    const unavailable = [...new Set([...(data.unavailable[date]?.daytime || []), ...(data.unavailable[date]?.evening || [])])].join(', ');
                     unavailableRow[colIndex] = unavailable;
                     unavailableRow[colIndex + 1] = '';
                     unavailableRow[colIndex + 2] = '';
@@ -687,7 +815,6 @@ function exportToExcel() {
                     p2Row[colIndex + 1] = '';
                     p2Row[colIndex + 2] = '';
                     p2Row[colIndex + 3] = '';
-                    const unavailable = [...new Set([...(data.unavailable[date]?.daytime || []), ...(data.unavailable[date]?.evening || [])])].join(', ');
                     unavailableRow[colIndex] = unavailable;
                     unavailableRow[colIndex + 1] = '';
                     unavailableRow[colIndex + 2] = '';
@@ -706,22 +833,7 @@ function exportToExcel() {
         currentWeek++;
     }
 
-    csvRows.push('');
-    const criteria = [
-        'Assignment Criteria:',
-        '1. No staff works both Friday and Saturday in the same week.',
-        '2. Staff with N-shift yesterday are prioritized for P1 or P2 today.',
-        '3. Ho can do N-shift except on Fridays.',
-        '4. Ting can only do N-shift on Fridays.',
-        '5. If Janet works Saturday A-shift, include A2 shift on Friday of the same week.',
-        '6. Janet is excluded from A2 shift.',
-        '7. Janet must be assigned exactly 3 Saturday A-shifts if available, else A or P1.',
-        '8. A staff cannot be assigned to both N and P1/P2 shifts on the same day unless they are already assigned to A/(A)/A2.',
-        '9. Unavailable groups: Daytime (A, A2, (A), P1, P2), Evening (N, P1, P2), AL (all shifts).'
-    ];
-    criteria.forEach(criterion => {
-        csvRows.push(`"${criterion}"`);
-    });
+    
 
     const csvContent = csvRows.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -734,22 +846,152 @@ function exportToExcel() {
     link.click();
     document.body.removeChild(link);
 
-    showPopup('CSV file exported!');
+    showPopup('Exported Successfully!');
 }
 
-// Generate roster
+// Update responsible officer based on month
+function updateOfficer() {
+    const month = parseInt(document.getElementById('month').value);
+    let officer = '';
+    switch (month + 1) {
+        case 2: case 6: case 10:
+            officer = 'Felix';
+            break;
+        case 1: case 5: case 9:
+            officer = 'Sharris';
+            break;
+        case 4: case 8: case 12:
+            officer = 'Mimmy';
+            break;
+        case 3: case 7: case 11:
+            officer = 'Brenda';
+            break;
+        default:
+            officer = 'None';
+    }
+    document.getElementById('officerName').textContent = officer;
+}
+
+// Get duplicate staff for a date
+function getDuplicateStaff(date) {
+    const roster = data.roster[date] || {};
+    const nonNStaff = [
+        ...(roster['A'] || []),
+        ...(roster['A2'] || []),
+        ...(roster['(A)'] || []),
+        ...(roster['P1'] || []),
+        ...(roster['P2'] || [])
+    ].map(name => name.toLowerCase());
+    const nStaff = (roster['N'] || []).map(name => name.toLowerCase());
+
+    const duplicates = new Set();
+    const seen = new Set();
+    nonNStaff.forEach(name => {
+        if (seen.has(name)) {
+            duplicates.add(name);
+        } else {
+            seen.add(name);
+        }
+    });
+
+    const nDuplicates = new Set(nStaff.filter(name => (roster['P1'] || []).concat(roster['P2'] || []).map(n => n.toLowerCase()).includes(name)));
+    nDuplicates.forEach(name => duplicates.add(name));
+
+    console.log('Duplicates for', date, ':', duplicates);
+    return duplicates;
+}
+
+// Clear shift data for a specific date
+function clearShift(date) {
+    try {
+        if (data.roster[date]) {
+            delete data.roster[date];
+        }
+        if (data.fixedAssignments[date]) {
+            delete data.fixedAssignments[date];
+        }
+        saveData();
+        renderPage2();
+        showPopup(`Shift cleared for ${date}!`);
+    } catch (error) {
+        console.error('Error clearing shift:', error);
+        showPopup('Failed to clear shift!');
+    }
+}
+
+// Clear both shift and unavailability data for a specific date
+function clearAllForDate(date) {
+    try {
+        if (data.roster[date]) {
+            delete data.roster[date];
+        }
+        if (data.unavailable[date]) {
+            delete data.unavailable[date];
+        }
+        if (data.fixedAssignments[date]) {
+            delete data.fixedAssignments[date];
+        }
+        saveData();
+        renderPage2();
+        showPopup(`All cleared for ${date}!`);
+    } catch (error) {
+        console.error('Error clearing all for date:', error);
+        showPopup('Failed to clear all!');
+    }
+}
+
+// Toggle visibility of unavailable sections
+// Toggle visibility of unavailable sections
+function toggleAllUnavailable(button) {
+    const unavailableSections = document.querySelectorAll('#calendar2 .unavailable');
+    const allVisible = Array.from(unavailableSections).every(section => section.style.display !== 'none');
+    unavailableSections.forEach(section => {
+        section.style.display = allVisible ? 'none' : 'block';
+    });
+
+    // Update text for both top and bottom buttons
+    const buttons = document.querySelectorAll('.toggle-all-unavailable');
+    buttons.forEach(btn => {
+        btn.textContent = allVisible ? 'Show Unavailable' : 'Hide Unavailable';
+    });
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing...');
+    loadData();
+    goToPage(1);
+    updateOfficer();
+
+    document.getElementById('year').addEventListener('change', updateOfficer);
+    document.getElementById('month').addEventListener('change', updateOfficer);
+
+    window.addEventListener('scroll', () => {
+        const scrollToTopBtn = document.querySelector('.scroll-to-top');
+        if (scrollToTopBtn) {
+            if (window.scrollY > 100) {
+                scrollToTopBtn.classList.add('show');
+            } else {
+                scrollToTopBtn.classList.remove('show');
+            }
+        }
+    });
+});
+
 function generateRoster() {
     if (data.pool1.length === 0 && data.pool2.length === 0) {
         showPopup('Cannot generate roster: both staff pools are empty!');
         return;
     }
 
+    // Initialize empty roster, fixed assignments will be applied during generation
     data.roster = {};
     const { year, month } = data;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const allStaff = [...new Set([...data.pool1, ...data.pool2])];
     let janetAssignmentWarnings = [];
 
+    // Identify all Saturdays
     const saturdayDates = [];
     for (let day = 1; day <= daysInMonth; day++) {
         const date = `${year}-${month + 1}-${day}`;
@@ -758,18 +1000,27 @@ function generateRoster() {
         }
     }
 
+    // Assign Janet to exactly 3 Saturday A shifts, respecting fixed assignments
     let janetSaturdayCount = 0;
-    const shuffledSaturdays = saturdayDates.sort(() => Math.random() - 0.5);
+    const shuffledSaturdays = [...saturdayDates].sort(() => Math.random() - 0.5);
     const janet = 'Janet';
     for (let i = 0; i < Math.min(3, shuffledSaturdays.length); i++) {
         const date = shuffledSaturdays[i];
         const unavailable = (data.unavailable[date]?.al || []).map(name => name.toLowerCase());
-        if (!unavailable.includes(janet.toLowerCase())) {
-            data.roster[date] = { A: [janet], '(A)': [] };
+        if (!unavailable.includes(janet.toLowerCase()) && !data.fixedAssignments[date]?.A && janetSaturdayCount < 3) {
+            data.roster[date] = data.roster[date] || {};
+            data.roster[date].A = [janet];
+            data.roster[date]['(A)'] = [];
             janetSaturdayCount++;
+        } else if (unavailable.includes(janet.toLowerCase())) {
+            janetAssignmentWarnings.push(`Janet unavailable for Saturday A-shift on ${date}.`);
         }
     }
+    if (janetSaturdayCount < 3 && shuffledSaturdays.length >= 3) {
+        janetAssignmentWarnings.push(`Could only assign Janet to ${janetSaturdayCount} Saturday A-shifts (target: 3 due to unavailability).`);
+    }
 
+    // Track weeks with Janet's Saturday A shifts
     const janetSaturdayWeeks = new Set();
     for (let date of saturdayDates) {
         if (data.roster[date]?.A?.includes(janet)) {
@@ -778,12 +1029,13 @@ function generateRoster() {
         }
     }
 
+    // Assign shifts for each day
     for (let day = 1; day <= daysInMonth; day++) {
         const date = `${year}-${month + 1}-${day}`;
         const dayOfWeek = new Date(year, month, day).getDay();
         const isHoliday = data.holidays && data.holidays.includes(date);
         if (isHoliday || dayOfWeek === 0) {
-            data.roster[date] = {};
+            data.roster[date] = data.roster[date] || {};
             continue;
         }
 
@@ -793,6 +1045,15 @@ function generateRoster() {
         const includeA2Shift = isFriday && janetSaturdayWeeks.has(weekNumber);
         const shifts = isSaturday ? ['A', '(A)'] : isFriday && includeA2Shift ? ['N', 'A', 'A2', '(A)', 'P1', 'P2'] : ['N', 'A', '(A)', 'P1', 'P2'];
         if (!data.roster[date]) data.roster[date] = {};
+
+        // Apply fixed assignments from user input
+        if (data.fixedAssignments[date]) {
+            Object.entries(data.fixedAssignments[date]).forEach(([shift, staff]) => {
+                if (staff.length > 0) {
+                    data.roster[date][shift] = staff;
+                }
+            });
+        }
 
         const unavailableDaytime = (data.unavailable[date]?.daytime || []).map(name => name.toLowerCase());
         const unavailableEvening = (data.unavailable[date]?.evening || []).map(name => name.toLowerCase());
@@ -819,43 +1080,52 @@ function generateRoster() {
             availablePool1 = availablePool1.filter(s => !friStaff.includes(s.toLowerCase()));
         }
 
-        let janetAssigned = data.roster[date]?.A?.includes(janet) || false;
+        let janetAssigned = data.roster[date]?.A?.includes(janet) || data.roster[date]?.P1?.includes(janet) || false;
         const isJanetAvailable = (availablePool1.includes(janet) || availablePool2.includes(janet)) && !unavailableAL.includes(janet.toLowerCase());
-        let janetShifts = isSaturday ? ['A'] : ['A', 'P1'];
-        if (isJanetAvailable && !janetAssigned && janetShifts.length > 0 && (!isSaturday || janetSaturdayCount < 3)) {
-            const availableJanetShifts = janetShifts.filter(shift => {
+
+        // Ensure Janet has A or P1 every day if not already assigned (and not fixed)
+        if (!janetAssigned && isJanetAvailable && !data.fixedAssignments[date]?.A && !data.fixedAssignments[date]?.P1) {
+            const availableJanetShifts = ['A', 'P1'].filter(shift => {
                 if (shift === 'P1' && (unavailableEvening.includes(janet.toLowerCase()) || unavailableDaytime.includes(janet.toLowerCase()))) return false;
                 return !data.roster[date][shift]?.length;
             });
             if (availableJanetShifts.length > 0) {
                 const randomShift = availableJanetShifts[Math.floor(Math.random() * availableJanetShifts.length)];
                 data.roster[date][randomShift] = [janet];
-                if (randomShift === 'A' && isSaturday) janetSaturdayCount++;
                 janetAssigned = true;
                 availablePool1 = availablePool1.filter(s => s.toLowerCase() !== janet.toLowerCase());
                 availablePool2 = availablePool2.filter(s => s.toLowerCase() !== janet.toLowerCase());
-            } else if (!isSaturday) {
+            } else {
                 janetAssignmentWarnings.push(`Could not assign Janet to A or P1 on ${date} due to shift conflicts or unavailability.`);
             }
         }
 
+        // If Janet is assigned Saturday, ensure A shift on preceding Friday
+        if (isFriday && nextDate && data.roster[nextDate]?.A?.includes(janet) && !data.roster[date]?.A?.includes(janet) && !data.fixedAssignments[date]?.A) {
+            if (!unavailableAL.includes(janet.toLowerCase()) && !unavailableDaytime.includes(janet.toLowerCase())) {
+                data.roster[date].A = [janet];
+                data.roster[date]['(A)'] = [];
+                availablePool1 = availablePool1.filter(s => s.toLowerCase() !== janet.toLowerCase());
+                availablePool2 = availablePool2.filter(s => s.toLowerCase() !== janet.toLowerCase());
+            } else {
+                janetAssignmentWarnings.push(`Janet unavailable for A shift on ${date} despite Saturday duty on ${nextDate}.`);
+            }
+        }
+
+        // Assign other shifts, skipping fixed ones
         shifts.forEach(shift => {
-            if (data.roster[date][shift]?.length) return;
+            if (data.roster[date][shift]?.length || data.fixedAssignments[date]?.[shift]?.length) return;
 
             let candidates;
             if (shift === 'N') {
                 candidates = [...availablePool1, ...availablePool2].filter(s => {
                     if (unavailableEvening.includes(s.toLowerCase())) return false;
-                    if (s.toLowerCase() === 'ho') {
-                        return dayOfWeek !== 5;
-                    }
-                    if (s.toLowerCase() === 'ting') {
-                        return dayOfWeek === 5;
-                    }
+                    if (s.toLowerCase() === 'ho') return dayOfWeek !== 5;
+                    if (s.toLowerCase() === 'ting') return dayOfWeek === 5;
                     return true;
                 });
             } else if (shift === 'A2') {
-                candidates = availablePool1.filter(s => s.toLowerCase() !== janet.toLowerCase() && !unavailableDaytime.includes(s.toLowerCase()));
+                candidates = includeA2Shift ? availablePool1.filter(s => s.toLowerCase() !== janet.toLowerCase() && !unavailableDaytime.includes(s.toLowerCase())) : [];
             } else if (['A', '(A)'].includes(shift)) {
                 candidates = availablePool1.filter(s => !unavailableDaytime.includes(s.toLowerCase()));
             } else if (['P1', 'P2'].includes(shift)) {
@@ -887,8 +1157,8 @@ function generateRoster() {
                 const selected = validCandidates[Math.floor(Math.random() * validCandidates.length)];
                 data.roster[date][shift] = [selected];
                 if (shift !== 'N' || !data.roster[date]['A']?.some(as => as.toLowerCase() === selected.toLowerCase()) && 
-                    !data.roster[date]['(A)']?.some(as => as.toLowerCase() === s.toLowerCase()) && 
-                    !data.roster[date]['A2']?.some(as => as.toLowerCase() === s.toLowerCase())) {
+                    !data.roster[date]['(A)']?.some(as => as.toLowerCase() === selected.toLowerCase()) && 
+                    !data.roster[date]['A2']?.some(as => as.toLowerCase() === selected.toLowerCase())) {
                     availablePool1 = availablePool1.filter(s => s.toLowerCase() !== selected.toLowerCase());
                     availablePool2 = availablePool2.filter(s => s.toLowerCase() !== selected.toLowerCase());
                 }
@@ -896,6 +1166,11 @@ function generateRoster() {
                 data.roster[date][shift] = [];
             }
         });
+    }
+
+    // Final validation
+    if (janetSaturdayCount !== 3 && saturdayDates.length >= 3) {
+        janetAssignmentWarnings.push(`Janet assigned to ${janetSaturdayCount} Saturday A-shifts instead of exactly 3 due to constraints.`);
     }
 
     renderPage2();
@@ -906,77 +1181,3 @@ function generateRoster() {
         showPopup('Roster generated!');
     }
 }
-
-// Update responsible officer based on month
-function updateOfficer() {
-    const month = parseInt(document.getElementById('month').value);
-    let officer = '';
-    switch (month + 1) {
-        case 2: case 6: case 10:
-            officer = 'Felix';
-            break;
-        case 1: case 5: case 9:
-            officer = 'Sharris';
-            break;
-        case 4: case 8: case 12:
-            officer = 'Mimmy';
-            break;
-        case 3: case 7: case 11:
-            officer = 'Brenda';
-            break;
-        default:
-            officer = 'None';
-    }
-    document.getElementById('officerName').textContent = officer;
-}
-
-// Get duplicate staff for a date
-function getDuplicateStaff(date) {
-    const roster = data.roster[date] || {};
-    const nonNStaff = [
-        ...(roster['A'] || []),
-        ...(roster['(A)'] || []),
-        ...(roster['A2'] || []),
-        ...(roster['P1'] || []),
-        ...(roster['P2'] || [])
-    ].map(name => name.toLowerCase());
-    const nStaff = (roster['N'] || []).map(name => name.toLowerCase());
-
-    const duplicates = new Set();
-    const seen = new Set();
-    nonNStaff.forEach(name => {
-        if (seen.has(name)) {
-            duplicates.add(name);
-        } else {
-            seen.add(name);
-        }
-    });
-
-    const nDuplicates = new Set(nStaff.filter(name => (roster['P1'] || []).concat(roster['P2'] || []).map(n => n.toLowerCase()).includes(name)));
-    nDuplicates.forEach(name => duplicates.add(name));
-
-    console.log('Duplicates for', date, ':', duplicates); // Debug
-    return duplicates;
-}
-
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, initializing...'); // Debug
-    loadData();
-    goToPage(1);
-    updateOfficer();
-
-    document.getElementById('year').addEventListener('change', updateOfficer);
-    document.getElementById('month').addEventListener('change', updateOfficer);
-
-    window.addEventListener('scroll', () => {
-        const scrollToTopBtn = document.querySelector('.scroll-to-top');
-        if (scrollToTopBtn) {
-            if (window.scrollY > 100) {
-                scrollToTopBtn.classList.add('show');
-            } else {
-                scrollToTopBtn.classList.remove('show');
-            }
-        }
-    });
-});

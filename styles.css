@@ -155,7 +155,7 @@ body {
 }/* Pop-up message styling */
 .popup {
     position: fixed;
-    top: 25%;
+    top: 35%;
     left: 50%;
     transform: translate(-50%, -50%);
     background-color: #28a745;
@@ -165,7 +165,7 @@ body {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
     z-index: 1000;
     opacity: 0;
-    transition: opacity 0.5s ease-in-out;
+    transition: opacity 0.8s ease-in-out;
     font-weight: bold;
     font-size: 17px;
 }.popup.show {
@@ -245,4 +245,51 @@ body {
     width: 100%;
     box-sizing: border-box;
     font-size: 12px;
+}
+.fix-date-button {
+    background-color: #6c757d;
+    color: white;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 8px;
+    font-size: 12px;
+}
+
+.fix-date-button:hover {
+    background-color: #5a6268;
+}
+
+/* Style for Clear Shift button */
+.clear-shift-button {
+    background-color: #dc3545; /* Red for clear action */
+    color: white;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 8px;
+    font-size: 12px;
+    margin-right: 4px; /* Space between buttons */
+}
+
+.clear-shift-button:hover {
+    background-color: #c82333;
+}
+
+/* Style for Clear Shift + Unavailable button */
+.clear-all-button {
+    background-color: #ff9800; /* Orange for clear all action */
+    color: white;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 8px;
+    font-size: 12px;
+}
+
+.clear-all-button:hover {
+    background-color: #f57c00;
 }
