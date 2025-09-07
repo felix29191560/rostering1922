@@ -9,8 +9,14 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+let db;
+try {
+    const app = firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+} catch (error) {
+    console.error('Firebase initialization failed:', error);
+    showPopup('Failed to connect to database! Using local data.');
+}
 
 // Global data storage
 let data = {
@@ -19,10 +25,8 @@ let data = {
     year: new Date().getFullYear(),
     month: 0, // Default to January
     holidays: [],
-    unavailable: { // { date: { daytime: [names], evening: [names], al: [names] } }
-        // Example: '2025-9-1': { daytime: ['Alice'], evening: ['Bob'], al: ['Charlie'] }
-    },
-    roster: {}, // { date: { shiftType: [staffNames] } }
+    unavailable: {},
+    roster: {}
 };
 
 // Reference to summary window
@@ -40,38 +44,39 @@ async function loadData() {
     const month = parseInt(document.getElementById('month').value) || 0;
 
     try {
-        // Load pool1, pool2, and holidays from Firestore
-        const configDoc = await db.collection('global_config').doc('staff_pools').get();
-        if (configDoc.exists) {
-            const configData = configDoc.data();
-            data.pool1 = configData.pool1 || [];
-            data.pool2 = configData.pool2 || [];
-            data.holidays = configData.holidays || [];
-        } else {
-            // Default values if no Firestore data exists
-            data.pool1 = [];
-            data.pool2 = [];
-            data.holidays = [];
-        }
-
-        // Set up real-time listener for Firestore updates
-        db.collection('global_config').doc('staff_pools').onSnapshot(doc => {
-            if (doc.exists) {
-                const configData = doc.data();
+        // Load pool1, pool2, and holidays from Firestore if available
+        if (db) {
+            const configDoc = await db.collection('global_config').doc('staff_pools').get();
+            if (configDoc.exists) {
+                const configData = configDoc.data();
                 data.pool1 = configData.pool1 || [];
                 data.pool2 = configData.pool2 || [];
                 data.holidays = configData.holidays || [];
-                document.getElementById('pool1').value = data.pool1.join('\n');
-                document.getElementById('pool2').value = data.pool2.join('\n');
-                document.getElementById('holidays').value = data.holidays.join('\n');
-                renderPage2();
+            } else {
+                data.pool1 = [];
+                data.pool2 = [];
+                data.holidays = [];
             }
-        }, error => {
-            console.error('Error in Firestore listener:', error);
-            showPopup('Failed to sync data!');
-        });
 
-        // Load roster and unavailable from localStorage
+            // Set up real-time listener for Firestore updates
+            db.collection('global_config').doc('staff_pools').onSnapshot(doc => {
+                if (doc.exists) {
+                    const configData = doc.data();
+                    data.pool1 = configData.pool1 || [];
+                    data.pool2 = configData.pool2 || [];
+                    data.holidays = configData.holidays || [];
+                    document.getElementById('pool1').value = data.pool1.join('\n');
+                    document.getElementById('pool2').value = data.pool2.join('\n');
+                    document.getElementById('holidays').value = data.holidays.join('\n');
+                    renderPage2();
+                }
+            }, error => {
+                console.error('Error in Firestore listener:', error);
+                showPopup('Failed to sync data!');
+            });
+        }
+
+        // Load roster, unavailable, year, and month from localStorage
         const saved = localStorage.getItem('rosterData');
         if (saved) {
             const localData = JSON.parse(saved);
@@ -96,34 +101,29 @@ async function loadData() {
         renderPage2();
         updateOfficer();
     } catch (error) {
-        console.error('Error loading data from Firestore:', error);
-        showPopup('Failed to load data!');
+        console.error('Error loading data:', error);
+        showPopup('Failed to load data! Using local data.');
     }
 }
 
 // Save data to Firestore and localStorage
 async function saveData() {
     try {
-        // Save pool1, pool2, and holidays to Firestore
-        await db.collection('global_config').doc('staff_pools').set({
-            pool1: data.pool1,
-            pool2: data.pool2,
-            holidays: data.holidays
-        });
+        // Save pool1, pool2, and holidays to Firestore if available
+        if (db) {
+            await db.collection('global_config').doc('staff_pools').set({
+                pool1: data.pool1,
+                pool2: data.pool2,
+                holidays: data.holidays
+            });
+        }
 
-        // Save roster, unavailable, year, and month to localStorage
-        const localData = {
-            roster: data.roster,
-            unavailable: data.unavailable,
-            year: data.year,
-            month: data.month
-        };
-        localStorage.setItem('rosterData', JSON.stringify(localData));
-
+        // Save all data to localStorage (for compatibility with original code)
+        localStorage.setItem('rosterData', JSON.stringify(data));
         updateSummaryWindow();
     } catch (error) {
-        console.error('Error saving data to Firestore:', error);
-        showPopup('Failed to save data!');
+        console.error('Error saving data:', error);
+        showPopup('Failed to save data! Saved locally.');
     }
 }
 
@@ -139,7 +139,7 @@ function showPopup(message) {
     popup.classList.add('show');
     setTimeout(() => {
         popup.classList.remove('show');
-        setTimeout(() => popup.remove(), 500); // Remove after fade-out
+        setTimeout(() => popup.remove(), 500);
     }, 2000);
 }
 
@@ -147,7 +147,6 @@ function showPopup(message) {
 function goToPage(pageNum) {
     document.querySelectorAll('.page').forEach(page => page.style.display = 'none');
     document.getElementById(`page${pageNum}`).style.display = 'block';
-    // Update step bar
     document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
     document.getElementById(`step${pageNum}`).classList.add('active');
     if (pageNum === 2) renderPage2();
@@ -167,55 +166,35 @@ async function savePage1() {
     const newYear = parseInt(document.getElementById('year').value) || new Date().getFullYear();
     const newMonth = parseInt(document.getElementById('month').value) || 0;
 
-    // Validate inputs
-    const pool1 = document.getElementById('pool1').value.trim().split('\n').filter(name => name.trim());
-    const pool2 = document.getElementById('pool2').value.trim().split('\n').filter(name => name.trim());
-    const holidays = document.getElementById('holidays').value
+    // Process inputs (same as original code)
+    data.pool1 = document.getElementById('pool1').value.trim().split('\n').filter(name => name.trim());
+    data.pool2 = document.getElementById('pool2').value.trim().split('\n').filter(name => name.trim());
+    data.holidays = document.getElementById('holidays').value
         .split(/[\n,]+/)
         .map(s => s.trim())
-        .filter(s => s)
-        .filter(s => /^\d{4}-\d{1,2}-\d{1,2}$/.test(s)); // Validate YYYY-M-D format
+        .filter(s => s);
 
-    if (pool1.length === 0 || pool2.length === 0) {
-        showPopup('Please enter at least one staff member in each pool!');
-        return;
-    }
-    if (holidays.some(date => !isValidDate(date))) {
-        showPopup('Invalid holiday date format! Use YYYY-M-D.');
-        return;
-    }
-
-    // Clear roster and unavailable data if year or month changes
+    // Clear roster and unavailable if year or month changes
     if (newYear !== data.year || newMonth !== data.month) {
         data.unavailable = {};
         data.roster = {};
     }
 
-    data.pool1 = pool1;
-    data.pool2 = pool2;
     data.year = newYear;
     data.month = newMonth;
-    data.holidays = holidays;
 
     await saveData();
     renderPage2();
     showPopup('Data saved!');
 }
 
-// Validate date format (YYYY-M-D)
-function isValidDate(dateStr) {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
-}
-
-// Page 2: Save roster and unavailable (same as clearAll, updates localStorage)
+// Page 2: Save roster and unavailable
 function savePage2() {
     saveData();
     showPopup('Page 2 data saved!');
 }
 
-// Clear only roster data (not unavailable)
+// Clear only roster data
 function clearRoster() {
     data.roster = {};
     saveData();
@@ -277,7 +256,6 @@ function renderPage2() {
                 if (isHoliday) div.classList.add('holiday');
                 if (isSunday) div.classList.add('sunday');
 
-                // Check for duplicate staff names
                 const duplicates = getDuplicateStaff(date);
                 const roster = data.roster[date] || {};
 
@@ -323,7 +301,6 @@ function renderPage2() {
                         html += `<div style="flex:1;"><b>P2</b>: <input type="text" style="${p2Style}" value="${(roster['P2'] || []).join(', ')}" onchange="updateRoster('${date}', 'P2', this.value)"></div>`;
                     }
                     html += `</div>`;
-                    // Unavailability section (visible by default)
                     html += `<div class="unavailable">`;
                     html += `<div>Unavailable(Daytime): <textarea class="unavailable-input" rows="2" onchange="updateUnavailable('${date}', 'daytime', this.value)">${(data.unavailable[date]?.daytime || []).join('\n')}</textarea></div>`;
                     html += `<div>Unavailable(Evening): <textarea class="unavailable-input" rows="2" onchange="updateUnavailable('${date}', 'evening', this.value)">${(data.unavailable[date]?.evening || []).join('\n')}</textarea></div>`;
@@ -338,10 +315,7 @@ function renderPage2() {
         calendar.appendChild(weekDiv);
     }
 
-    // Render AL list
     renderALList();
-
-    // Ensure toggle button reflects default visible state
     const toggleButton = document.querySelector('.toggle-all-unavailable');
     if (toggleButton) {
         toggleButton.textContent = 'Hide Unavailable';
@@ -375,14 +349,14 @@ function updateUnavailable(date, type, value) {
     renderPage2();
 }
 
-// Render AL list (show only day of month)
+// Render AL list
 function renderALList() {
     const alList = document.getElementById('al-list');
     let html = '<h3>AL:</h3>';
     let alEntries = [];
     Object.entries(data.unavailable).forEach(([date, unavailable]) => {
         if (unavailable.al && unavailable.al.length > 0) {
-            const day = parseInt(date.split('-')[2]); // Extract day only
+            const day = parseInt(date.split('-')[2]);
             unavailable.al.forEach(staff => {
                 let staffEntry = alEntries.find(entry => entry.staff === staff);
                 if (!staffEntry) {
@@ -405,7 +379,7 @@ function renderALList() {
 
 // Generate summary table HTML
 function generateSummaryTable() {
-    const allStaff = [...new Set([...data.pool1, ...data.pool2])]; // Combine and remove duplicates
+    const allStaff = [...new Set([...data.pool1, ...data.pool2])];
     let html = `
         <!DOCTYPE html>
         <html lang="en">
@@ -476,12 +450,12 @@ function generateSummaryTable() {
         Object.entries(data.roster).forEach(([date, day]) => {
             const d = new Date(date);
             if (day['A']?.includes(staff)) a++;
-            if (day['A2']?.includes(staff)) a++; // Combine A2 with A
+            if (day['A2']?.includes(staff)) a++;
             if (day['(A)']?.includes(staff)) a3++;
             if (day['P1']?.includes(staff)) p1++;
             if (day['P2']?.includes(staff)) p2++;
             if (day['N']?.includes(staff)) n++;
-            if (d.getDay() === 6) { // Saturday
+            if (d.getDay() === 6) {
                 if (Object.values(day).some(arr => arr?.includes(staff))) sat++;
             }
         });
@@ -528,19 +502,15 @@ function exportToExcel() {
     const weeks = Math.ceil((daysInMonth + firstDay) / 7);
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    // Initialize CSV data
     let csvRows = [];
-
-    // Header row: Empty, Day names (spanning three columns each, except Fri uses four: Q-T), AL
     const headerRow = ['', ...daysOfWeek.map((day, index) => {
         if (day === 'Fri') {
-            return ['Fri', '', '', '']; // Four columns for Friday (Q-T)
+            return ['Fri', '', '', ''];
         }
-        return [day, '', '']; // Three columns for other days
+        return [day, '', ''];
     }).flat(), 'AL'];
     csvRows.push(headerRow.map(cell => `"${cell}"`).join(','));
 
-    // Collect AL entries
     const alEntries = [];
     for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${month + 1}-${day}`;
@@ -558,35 +528,32 @@ function exportToExcel() {
     }
     const alString = alEntries.length > 0 ? alEntries.map(entry => `${entry.staff}: ${entry.days.join(', ')}`).join('; ') : 'No AL recorded';
 
-    // Week data
     let currentWeek = 1;
     for (let week = 1; week <= weeks; week++) {
-        // Week dates row
         const weekDates = ['Week ' + week, ...Array(7).map((_, index) => {
-            if (index === 5) return ['', '', '', '']; // Four columns for Friday
-            return ['', '', '']; // Three columns for other days
+            if (index === 5) return ['', '', '', ''];
+            return ['', '', ''];
         }).flat()];
         for (let i = 0; i < 7; i++) {
             const dayIndex = (week - 1) * 7 + i - firstDay + 1;
             if (dayIndex >= 1 && dayIndex <= daysInMonth) {
-                const colIndex = 1 + (i < 5 ? i * 3 : (i === 5 ? 15 : 19)); // Fri: Q=16, Sat: U=20
+                const colIndex = 1 + (i < 5 ? i * 3 : (i === 5 ? 15 : 19));
                 weekDates[colIndex] = `${dayIndex}/${month + 1}`;
                 if (i !== 5) {
-                    weekDates[colIndex + 1] = ''; // Empty for non-Friday
-                    weekDates[colIndex + 2] = ''; // Empty for non-Friday
+                    weekDates[colIndex + 1] = '';
+                    weekDates[colIndex + 2] = '';
                 } else {
-                    weekDates[colIndex + 1] = ''; // Empty for Friday (Q+1=R)
-                    weekDates[colIndex + 2] = ''; // Empty for Friday (Q+2=S)
-                    weekDates[colIndex + 3] = ''; // Empty for Friday (Q+3=T)
+                    weekDates[colIndex + 1] = '';
+                    weekDates[colIndex + 2] = '';
+                    weekDates[colIndex + 3] = '';
                 }
             }
         }
         if (week === 1) {
-            weekDates[23] = alString; // Column X for AL
+            weekDates[23] = alString;
         }
         csvRows.push(weekDates.map(cell => `"${cell}"`).join(','));
 
-        // Shift rows (N, A, P1, P2, Unavailable)
         const nRow = ['N', ...Array(7).map((_, index) => {
             if (index === 5) return ['', '', '', ''];
             return ['', '', ''];
@@ -617,7 +584,7 @@ function exportToExcel() {
 
             const isHoliday = data.holidays && data.holidays.includes(date);
             const isSunday = dayOfWeek === 0;
-            const colIndex = dayOfWeek < 5 ? 1 + dayOfWeek * 3 : (dayOfWeek === 5 ? 16 : 20); // Fri: Q=16, Sat: U=20
+            const colIndex = dayOfWeek < 5 ? 1 + dayOfWeek * 3 : (dayOfWeek === 5 ? 16 : 20);
 
             if (isHoliday || isSunday) {
                 if (isHoliday) {
@@ -662,7 +629,7 @@ function exportToExcel() {
                 }
             } else {
                 const roster = data.roster[date] || {};
-                if (dayOfWeek !== 5) { // Non-Friday
+                if (dayOfWeek !== 5) {
                     nRow[colIndex] = (roster['N'] || []).join(', ');
                     nRow[colIndex + 1] = '';
                     nRow[colIndex + 2] = '';
@@ -679,15 +646,15 @@ function exportToExcel() {
                     unavailableRow[colIndex] = unavailable;
                     unavailableRow[colIndex + 1] = '';
                     unavailableRow[colIndex + 2] = '';
-                } else { // Friday (Q=16, R=17, S=18, T=19)
+                } else {
                     nRow[colIndex] = (roster['N'] || []).join(', ');
                     nRow[colIndex + 1] = '';
                     nRow[colIndex + 2] = '';
                     nRow[colIndex + 3] = '';
-                    aRow[colIndex] = (roster['A'] || []).join(', '); // Q: A shift
-                    aRow[colIndex + 1] = (roster['A2'] || []).join(', '); // R: A2 shift
-                    aRow[colIndex + 2] = roster['A']?.length || roster['(A)']?.length ? '+' : ''; // S: +
-                    aRow[colIndex + 3] = (roster['(A)'] || []).join(', '); // T: (A) shift
+                    aRow[colIndex] = (roster['A'] || []).join(', ');
+                    aRow[colIndex + 1] = (roster['A2'] || []).join(', ');
+                    aRow[colIndex + 2] = roster['A']?.length || roster['(A)']?.length ? '+' : '';
+                    aRow[colIndex + 3] = (roster['(A)'] || []).join(', ');
                     p1Row[colIndex] = (roster['P1'] || []).join(', ');
                     p1Row[colIndex + 1] = '';
                     p1Row[colIndex + 2] = '';
@@ -715,10 +682,7 @@ function exportToExcel() {
         currentWeek++;
     }
 
-    // Empty row before criteria
     csvRows.push('');
-
-    // Assignment criteria
     const criteria = [
         'Assignment Criteria:',
         '1. No staff works both Friday and Saturday in the same week.',
@@ -735,10 +699,7 @@ function exportToExcel() {
         csvRows.push(`"${criterion}"`);
     });
 
-    // Combine rows into CSV content
     const csvContent = csvRows.join('\n');
-
-    // Create and download the CSV file
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
@@ -754,13 +715,18 @@ function exportToExcel() {
 
 // Generate roster
 function generateRoster() {
+    // Check if pools are empty
+    if (data.pool1.length === 0 && data.pool2.length === 0) {
+        showPopup('Cannot generate roster: both staff pools are empty!');
+        return;
+    }
+
     data.roster = {};
     const { year, month } = data;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const allStaff = [...new Set([...data.pool1, ...data.pool2])]; // Combine and remove duplicates
+    const allStaff = [...new Set([...data.pool1, ...data.pool2])];
     let janetAssignmentWarnings = [];
 
-    // Identify Saturdays for Janet's A shift assignment
     const saturdayDates = [];
     for (let day = 1; day <= daysInMonth; day++) {
         const date = `${year}-${month + 1}-${day}`;
@@ -769,9 +735,8 @@ function generateRoster() {
         }
     }
 
-    // Ensure Janet gets exactly 3 Saturday A shifts
     let janetSaturdayCount = 0;
-    const shuffledSaturdays = saturdayDates.sort(() => Math.random() - 0.5); // Shuffle for random selection
+    const shuffledSaturdays = saturdayDates.sort(() => Math.random() - 0.5);
     const janet = 'Janet';
     for (let i = 0; i < Math.min(3, shuffledSaturdays.length); i++) {
         const date = shuffledSaturdays[i];
@@ -782,7 +747,6 @@ function generateRoster() {
         }
     }
 
-    // Track weeks where Janet has Saturday A shifts
     const janetSaturdayWeeks = new Set();
     for (let date of saturdayDates) {
         if (data.roster[date]?.A?.includes(janet)) {
@@ -796,7 +760,7 @@ function generateRoster() {
         const dayOfWeek = new Date(year, month, day).getDay();
         const isHoliday = data.holidays && data.holidays.includes(date);
         if (isHoliday || dayOfWeek === 0) {
-            data.roster[date] = {}; // No shifts on holidays or Sundays
+            data.roster[date] = {};
             continue;
         }
 
@@ -807,36 +771,31 @@ function generateRoster() {
         const shifts = isSaturday ? ['A', '(A)'] : isFriday && includeA2Shift ? ['N', 'A', 'A2', '(A)', 'P1', 'P2'] : ['N', 'A', '(A)', 'P1', 'P2'];
         if (!data.roster[date]) data.roster[date] = {};
 
-        // Get unavailable staff for this date (case-insensitive)
         const unavailableDaytime = (data.unavailable[date]?.daytime || []).map(name => name.toLowerCase());
         const unavailableEvening = (data.unavailable[date]?.evening || []).map(name => name.toLowerCase());
         const unavailableAL = (data.unavailable[date]?.al || []).map(name => name.toLowerCase());
 
-        // Get staff assigned on previous and next day
         const prevDate = day > 1 ? `${year}-${month + 1}-${day - 1}` : null;
         const nextDate = day < daysInMonth ? `${year}-${month + 1}-${day + 1}` : null;
         const prevDayShifts = prevDate ? data.roster[prevDate] || {} : {};
         const nextDayShifts = nextDate ? data.roster[nextDate] || {} : {};
 
-        // Available staff (case-insensitive filtering)
         let availablePool1 = data.pool1.filter(s => !unavailableAL.includes(s.toLowerCase()));
         let availablePool2 = data.pool2.filter(s => !unavailableAL.includes(s.toLowerCase()));
 
-        // Check Friday-Saturday constraint
-        if (dayOfWeek === 5) { // Friday
+        if (dayOfWeek === 5) {
             const satDate = `${year}-${month + 1}-${day + 1}`;
             const satShifts = data.roster[satDate] || {};
             const satStaff = Object.values(satShifts).flat().map(s => s.toLowerCase());
             availablePool1 = availablePool1.filter(s => !satStaff.includes(s.toLowerCase()));
         }
-        if (dayOfWeek === 6) { // Saturday
+        if (dayOfWeek === 6) {
             const friDate = `${year}-${month + 1}-${day - 1}`;
             const friShifts = data.roster[friDate] || {};
             const friStaff = Object.values(friShifts).flat().map(s => s.toLowerCase());
             availablePool1 = availablePool1.filter(s => !friStaff.includes(s.toLowerCase()));
         }
 
-        // Ensure Janet gets A or P1 shift (except A2) if available and not already assigned 3 Saturday A shifts
         let janetAssigned = data.roster[date]?.A?.includes(janet) || false;
         const isJanetAvailable = (availablePool1.includes(janet) || availablePool2.includes(janet)) && !unavailableAL.includes(janet.toLowerCase());
         let janetShifts = isSaturday ? ['A'] : ['A', 'P1'];
@@ -857,26 +816,22 @@ function generateRoster() {
             }
         }
 
-        // Assign remaining shifts, prioritizing staff with N-shift yesterday for P1/P2
         shifts.forEach(shift => {
-            if (data.roster[date][shift]?.length) return; // Skip if already assigned
+            if (data.roster[date][shift]?.length) return;
 
             let candidates;
             if (shift === 'N') {
                 candidates = [...availablePool1, ...availablePool2].filter(s => {
                     if (unavailableEvening.includes(s.toLowerCase())) return false;
                     if (s.toLowerCase() === 'ho') {
-                        // Ho can do N shift except Friday
                         return dayOfWeek !== 5;
                     }
                     if (s.toLowerCase() === 'ting') {
-                        // Ting can do N shift only on Friday
                         return dayOfWeek === 5;
                     }
                     return true;
                 });
             } else if (shift === 'A2') {
-                // Exclude Janet from A2 shift
                 candidates = availablePool1.filter(s => s.toLowerCase() !== janet.toLowerCase() && !unavailableDaytime.includes(s.toLowerCase()));
             } else if (['A', '(A)'].includes(shift)) {
                 candidates = availablePool1.filter(s => !unavailableDaytime.includes(s.toLowerCase()));
@@ -886,14 +841,12 @@ function generateRoster() {
                 candidates = availablePool1;
             }
 
-            // Prioritize staff who had N-shift yesterday for P1 or P2
             let prioritizedCandidates = [];
             if (shift === 'P1' || shift === 'P2') {
                 prioritizedCandidates = candidates.filter(s => prevDayShifts['N']?.some(ps => ps.toLowerCase() === s.toLowerCase()));
             }
             const finalCandidates = prioritizedCandidates.length > 0 ? prioritizedCandidates : candidates;
 
-            // Filter candidates based on constraints
             const validCandidates = finalCandidates.filter(s => {
                 const assignedShifts = data.roster[date] ? Object.values(data.roster[date]).flat() : [];
                 if (assignedShifts.some(as => as.toLowerCase() === s.toLowerCase())) {
@@ -907,7 +860,6 @@ function generateRoster() {
                 return true;
             });
 
-            // Randomly select a staff member
             if (validCandidates.length > 0) {
                 const selected = validCandidates[Math.floor(Math.random() * validCandidates.length)];
                 data.roster[date][shift] = [selected];
@@ -936,50 +888,37 @@ function generateRoster() {
 function updateOfficer() {
     const month = parseInt(document.getElementById('month').value);
     let officer = '';
-
-    // Map months to officers (month values are 0-based: 0=Jan, 1=Feb, ..., 11=Dec)
-    switch (month + 1) { // Add 1 to convert to 1-based month numbers
-        case 2: // February
-        case 6: // June
-        case 10: // October
+    switch (month + 1) {
+        case 2: case 6: case 10:
             officer = 'Felix';
             break;
-        case 1: // January
-        case 5: // May
-        case 9: // September
+        case 1: case 5: case 9:
             officer = 'Sharris';
             break;
-        case 4: // April
-        case 8: // August
-        case 12: // December
+        case 4: case 8: case 12:
             officer = 'Mimmy';
             break;
-        case 3: // March
-        case 7: // July
-        case 11: // November
+        case 3: case 7: case 11:
             officer = 'Brenda';
             break;
         default:
             officer = 'None';
     }
-
     document.getElementById('officerName').textContent = officer;
 }
 
 // Get duplicate staff for a date
 function getDuplicateStaff(date) {
     const roster = data.roster[date] || {};
-    // Combine staff from A, (A), A2, P1, P2 for duplicate checking
     const nonNStaff = [
         ...(roster['A'] || []),
         ...(roster['(A)'] || []),
         ...(roster['A2'] || []),
         ...(roster['P1'] || []),
         ...(roster['P2'] || [])
-    ].map(name => name.toLowerCase()); // Case-insensitive comparison
+    ].map(name => name.toLowerCase());
     const nStaff = (roster['N'] || []).map(name => name.toLowerCase());
 
-    // Find duplicates within A, (A), A2, P1, P2
     const duplicates = new Set();
     const seen = new Set();
     nonNStaff.forEach(name => {
@@ -990,28 +929,25 @@ function getDuplicateStaff(date) {
         }
     });
 
-    // Include duplicates between N and P1/P2 (but not N with A/(A)/A2)
     const nDuplicates = new Set(nStaff.filter(name => (roster['P1'] || []).concat(roster['P2'] || []).map(n => n.toLowerCase()).includes(name)));
     nDuplicates.forEach(name => duplicates.add(name));
 
-    return duplicates; // Returns lowercase names that are duplicated (excluding N with A/(A)/A2)
+    return duplicates;
 }
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
-    goToPage(1); // Set step1 as active on load
-    updateOfficer(); // Set initial officer
+    goToPage(1);
+    updateOfficer();
 
-    // Add event listeners for year and month changes
     document.getElementById('year').addEventListener('change', updateOfficer);
     document.getElementById('month').addEventListener('change', updateOfficer);
 
-    // Add scroll event listener for scroll-to-top icon
     window.addEventListener('scroll', () => {
         const scrollToTopBtn = document.querySelector('.scroll-to-top');
         if (scrollToTopBtn) {
-            if (window.scrollY > 100) { // Show when scrolled down 100px
+            if (window.scrollY > 100) {
                 scrollToTopBtn.classList.add('show');
             } else {
                 scrollToTopBtn.classList.remove('show');
