@@ -1,6 +1,6 @@
-// Firebase configuration
+// Firebase configuration (replace with your Firebase project config)
 const firebaseConfig = {
-  apiKey: "AIzaSyCe4HzQ3FXadF_drpR7XOyVQYIYi36L8KM",
+    apiKey: "AIzaSyCe4HzQ3FXadF_drpR7XOyVQYIYi36L8KM",
   authDomain: "rostering-1922.firebaseapp.com",
   projectId: "rostering-1922",
   storageBucket: "rostering-1922.firebasestorage.app",
@@ -13,6 +13,7 @@ let db;
 try {
     const app = firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
+    console.log('Firestore initialized:', db); // Debug
 } catch (error) {
     console.error('Firebase initialization failed:', error);
     showPopup('Failed to connect to database! Using local data.');
@@ -28,6 +29,7 @@ let data = {
     unavailable: {},
     roster: {}
 };
+console.log('Initial data:', data); // Debug
 
 // Reference to summary window
 let summaryWindow = null;
@@ -118,7 +120,7 @@ async function saveData() {
             });
         }
 
-        // Save all data to localStorage (for compatibility with original code)
+        // Save all data to localStorage
         localStorage.setItem('rosterData', JSON.stringify(data));
         updateSummaryWindow();
     } catch (error) {
@@ -166,7 +168,6 @@ async function savePage1() {
     const newYear = parseInt(document.getElementById('year').value) || new Date().getFullYear();
     const newMonth = parseInt(document.getElementById('month').value) || 0;
 
-    // Process inputs (same as original code)
     data.pool1 = document.getElementById('pool1').value.trim().split('\n').filter(name => name.trim());
     data.pool2 = document.getElementById('pool2').value.trim().split('\n').filter(name => name.trim());
     data.holidays = document.getElementById('holidays').value
@@ -174,7 +175,6 @@ async function savePage1() {
         .map(s => s.trim())
         .filter(s => s);
 
-    // Clear roster and unavailable if year or month changes
     if (newYear !== data.year || newMonth !== data.month) {
         data.unavailable = {};
         data.roster = {};
@@ -202,7 +202,7 @@ function clearRoster() {
     showPopup('Roster cleared!');
 }
 
-// Clear all Page 2 data (roster and unavailable)
+// Clear all Page 2 data
 function clearAll() {
     data.roster = {};
     data.unavailable = {};
@@ -222,103 +222,117 @@ function getWeekNumber(year, month, day) {
 
 // Page 2: Render roster calendar and AL list
 function renderPage2() {
+    console.log('Rendering Page 2 with data:', data); // Debug
     const calendar = document.getElementById('calendar2');
     const alList = document.getElementById('al-list');
     const monthYearDisplay = document.getElementById('page2-month-year');
+    if (!calendar || !alList || !monthYearDisplay) {
+        console.error('DOM elements missing:', { calendar, alList, monthYearDisplay });
+        showPopup('Error: Calendar elements not found!');
+        return;
+    }
+
     const { year, month } = data;
     monthYearDisplay.textContent = `${monthNames[month]} ${year}`;
     calendar.innerHTML = '';
     alList.innerHTML = '';
 
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstDay = new Date(year, month, 1).getDay();
-    const weeks = Math.ceil((daysInMonth + firstDay) / 7);
-    const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    try {
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const firstDay = new Date(year, month, 1).getDay();
+        const weeks = Math.ceil((daysInMonth + firstDay) / 7);
+        const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    for (let week = 1; week <= weeks; week++) {
-        const weekDiv = document.createElement('div');
-        weekDiv.className = 'week';
-        weekDiv.innerHTML = `<div class="week-label">Week ${week}</div>`;
-        const weekRow = document.createElement('div');
-        weekRow.className = 'week-row';
+        console.log('Calendar params:', { year, month, daysInMonth, firstDay, weeks }); // Debug
 
-        for (let i = 0; i < 7; i++) {
-            const dayIndex = (week - 1) * 7 + i - firstDay + 1;
-            const div = document.createElement('div');
-            div.className = 'day';
-            if (dayIndex >= 1 && dayIndex <= daysInMonth) {
-                const date = `${year}-${month + 1}-${dayIndex}`;
-                const weekday = daysOfWeek[new Date(year, month, dayIndex).getDay()];
-                const isSunday = weekday === 'Sun';
-                const isSaturday = weekday === 'Sat';
-                const isFriday = weekday === 'Fri';
-                const isHoliday = data.holidays && data.holidays.includes(date);
-                if (isHoliday) div.classList.add('holiday');
-                if (isSunday) div.classList.add('sunday');
+        for (let week = 1; week <= weeks; week++) {
+            const weekDiv = document.createElement('div');
+            weekDiv.className = 'week';
+            weekDiv.innerHTML = `<div class="week-label">Week ${week}</div>`;
+            const weekRow = document.createElement('div');
+            weekRow.className = 'week-row';
 
-                const duplicates = getDuplicateStaff(date);
-                const roster = data.roster[date] || {};
+            for (let i = 0; i < 7; i++) {
+                const dayIndex = (week - 1) * 7 + i - firstDay + 1;
+                const div = document.createElement('div');
+                div.className = 'day';
+                if (dayIndex >= 1 && dayIndex <= daysInMonth) {
+                    const date = `${year}-${month + 1}-${dayIndex}`;
+                    const weekday = daysOfWeek[new Date(year, month, dayIndex).getDay()];
+                    const isSunday = weekday === 'Sun';
+                    const isSaturday = weekday === 'Sat';
+                    const isFriday = weekday === 'Fri';
+                    const isHoliday = data.holidays && data.holidays.includes(date);
+                    if (isHoliday) div.classList.add('holiday');
+                    if (isSunday) div.classList.add('sunday');
 
-                let html = `<div class="day-header${isSunday ? ' sunday' : ''}">${dayIndex} (${weekday})</div>`;
-                if (isHoliday) {
-                    html += `<div style="color:#d9534f;font-weight:bold;">Holiday</div>`;
-                } else if (isSunday) {
-                    html += `<div style="color:#d9534f;font-weight:bold;">Sunday</div>`;
-                } else {
-                    html += `<div class="shifts" style="display:flex;flex-direction:column;gap:4px;">`;
-                    if (isSaturday) {
-                        const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        html += `<div style="flex:0.5;"><b>A</b>: <input type="text" style="${aStyle}" value="${(roster['A'] || []).join(', ')}" onchange="updateRoster('${date}', 'A', this.value)"></div>`;
-                        html += `<div style="flex:0.5;"><b>(A)</b>: <input type="text" style="${a3Style}" value="${(roster['(A)'] || []).join(', ')}" onchange="updateRoster('${date}', '(A)', this.value)"></div>`;
-                    } else if (isFriday) {
-                        const nStyle = roster['N']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        const a2Style = roster['A2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        const p1Style = roster['P1']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        const p2Style = roster['P2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        html += `<div style="flex:1;"><b>N</b>: <input type="text" style="${nStyle}" value="${(roster['N'] || []).join(', ')}" onchange="updateRoster('${date}', 'N', this.value)"></div>`;
-                        html += `<div style="display:flex;gap:4px;">`;
-                        html += `<div style="flex:0.33;"><b>A</b>: <input type="text" style="${aStyle}" value="${(roster['A'] || []).join(', ')}" onchange="updateRoster('${date}', 'A', this.value)"></div>`;
-                        html += `<div style="flex:0.33;"><b class="a2-label">A</b>: <input type="text" style="${a2Style}" value="${(roster['A2'] || []).join(', ')}" onchange="updateRoster('${date}', 'A2', this.value)"></div>`;
-                        html += `<div style="flex:0.33;"><b>(A)</b>: <input type="text" style="${a3Style}" value="${(roster['(A)'] || []).join(', ')}" onchange="updateRoster('${date}', '(A)', this.value)"></div>`;
-                        html += `</div>`;
-                        html += `<div style="flex:1;"><b>P1</b>: <input type="text" style="${p1Style}" value="${(roster['P1'] || []).join(', ')}" onchange="updateRoster('${date}', 'P1', this.value)"></div>`;
-                        html += `<div style="flex:1;"><b>P2</b>: <input type="text" style="${p2Style}" value="${(roster['P2'] || []).join(', ')}" onchange="updateRoster('${date}', 'P2', this.value)"></div>`;
+                    const duplicates = getDuplicateStaff(date);
+                    const roster = data.roster[date] || {};
+
+                    let html = `<div class="day-header${isSunday ? ' sunday' : ''}">${dayIndex} (${weekday})</div>`;
+                    if (isHoliday) {
+                        html += `<div style="color:#d9534f;font-weight:bold;">Holiday</div>`;
+                    } else if (isSunday) {
+                        html += `<div style="color:#d9534f;font-weight:bold;">Sunday</div>`;
                     } else {
-                        const nStyle = roster['N']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        const p1Style = roster['P1']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        const p2Style = roster['P2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
-                        html += `<div style="flex:1;"><b>N</b>: <input type="text" style="${nStyle}" value="${(roster['N'] || []).join(', ')}" onchange="updateRoster('${date}', 'N', this.value)"></div>`;
-                        html += `<div style="display:flex;gap:4px;">`;
-                        html += `<div style="flex:0.5;"><b>A</b>: <input type="text" style="${aStyle}" value="${(roster['A'] || []).join(', ')}" onchange="updateRoster('${date}', 'A', this.value)"></div>`;
-                        html += `<div style="flex:0.5;"><b>(A)</b>: <input type="text" style="${a3Style}" value="${(roster['(A)'] || []).join(', ')}" onchange="updateRoster('${date}', '(A)', this.value)"></div>`;
+                        html += `<div class="shifts" style="display:flex;flex-direction:column;gap:4px;">`;
+                        if (isSaturday) {
+                            const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            html += `<div style="flex:0.5;"><b>A</b>: <input type="text" style="${aStyle}" value="${(roster['A'] || []).join(', ')}" onchange="updateRoster('${date}', 'A', this.value)"></div>`;
+                            html += `<div style="flex:0.5;"><b>(A)</b>: <input type="text" style="${a3Style}" value="${(roster['(A)'] || []).join(', ')}" onchange="updateRoster('${date}', '(A)', this.value)"></div>`;
+                        } else if (isFriday) {
+                            const nStyle = roster['N']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const a2Style = roster['A2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const p1Style = roster['P1']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const p2Style = roster['P2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            html += `<div style="flex:1;"><b>N</b>: <input type="text" style="${nStyle}" value="${(roster['N'] || []).join(', ')}" onchange="updateRoster('${date}', 'N', this.value)"></div>`;
+                            html += `<div style="display:flex;gap:4px;">`;
+                            html += `<div style="flex:0.33;"><b>A</b>: <input type="text" style="${aStyle}" value="${(roster['A'] || []).join(', ')}" onchange="updateRoster('${date}', 'A', this.value)"></div>`;
+                            html += `<div style="flex:0.33;"><b class="a2-label">A</b>: <input type="text" style="${a2Style}" value="${(roster['A2'] || []).join(', ')}" onchange="updateRoster('${date}', 'A2', this.value)"></div>`;
+                            html += `<div style="flex:0.33;"><b>(A)</b>: <input type="text" style="${a3Style}" value="${(roster['(A)'] || []).join(', ')}" onchange="updateRoster('${date}', '(A)', this.value)"></div>`;
+                            html += `</div>`;
+                            html += `<div style="flex:1;"><b>P1</b>: <input type="text" style="${p1Style}" value="${(roster['P1'] || []).join(', ')}" onchange="updateRoster('${date}', 'P1', this.value)"></div>`;
+                            html += `<div style="flex:1;"><b>P2</b>: <input type="text" style="${p2Style}" value="${(roster['P2'] || []).join(', ')}" onchange="updateRoster('${date}', 'P2', this.value)"></div>`;
+                        } else {
+                            const nStyle = roster['N']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const aStyle = roster['A']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const a3Style = roster['(A)']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const p1Style = roster['P1']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            const p2Style = roster['P2']?.some(name => duplicates.has(name.toLowerCase())) ? 'color:#d9534f;' : '';
+                            html += `<div style="flex:1;"><b>N</b>: <input type="text" style="${nStyle}" value="${(roster['N'] || []).join(', ')}" onchange="updateRoster('${date}', 'N', this.value)"></div>`;
+                            html += `<div style="display:flex;gap:4px;">`;
+                            html += `<div style="flex:0.5;"><b>A</b>: <input type="text" style="${aStyle}" value="${(roster['A'] || []).join(', ')}" onchange="updateRoster('${date}', 'A', this.value)"></div>`;
+                            html += `<div style="flex:0.5;"><b>(A)</b>: <input type="text" style="${a3Style}" value="${(roster['(A)'] || []).join(', ')}" onchange="updateRoster('${date}', '(A)', this.value)"></div>`;
+                            html += `</div>`;
+                            html += `<div style="flex:1;"><b>P1</b>: <input type="text" style="${p1Style}" value="${(roster['P1'] || []).join(', ')}" onchange="updateRoster('${date}', 'P1', this.value)"></div>`;
+                            html += `<div style="flex:1;"><b>P2</b>: <input type="text" style="${p2Style}" value="${(roster['P2'] || []).join(', ')}" onchange="updateRoster('${date}', 'P2', this.value)"></div>`;
+                        }
                         html += `</div>`;
-                        html += `<div style="flex:1;"><b>P1</b>: <input type="text" style="${p1Style}" value="${(roster['P1'] || []).join(', ')}" onchange="updateRoster('${date}', 'P1', this.value)"></div>`;
-                        html += `<div style="flex:1;"><b>P2</b>: <input type="text" style="${p2Style}" value="${(roster['P2'] || []).join(', ')}" onchange="updateRoster('${date}', 'P2', this.value)"></div>`;
+                        html += `<div class="unavailable">`;
+                        html += `<div>Unavailable(Daytime): <textarea class="unavailable-input" rows="2" onchange="updateUnavailable('${date}', 'daytime', this.value)">${(data.unavailable[date]?.daytime || []).join('\n')}</textarea></div>`;
+                        html += `<div>Unavailable(Evening): <textarea class="unavailable-input" rows="2" onchange="updateUnavailable('${date}', 'evening', this.value)">${(data.unavailable[date]?.evening || []).join('\n')}</textarea></div>`;
+                        html += `<div>AL: <textarea class="unavailable-input" rows="2" onchange="updateUnavailable('${date}', 'al', this.value)">${(data.unavailable[date]?.al || []).join('\n')}</textarea></div>`;
+                        html += `</div>`;
                     }
-                    html += `</div>`;
-                    html += `<div class="unavailable">`;
-                    html += `<div>Unavailable(Daytime): <textarea class="unavailable-input" rows="2" onchange="updateUnavailable('${date}', 'daytime', this.value)">${(data.unavailable[date]?.daytime || []).join('\n')}</textarea></div>`;
-                    html += `<div>Unavailable(Evening): <textarea class="unavailable-input" rows="2" onchange="updateUnavailable('${date}', 'evening', this.value)">${(data.unavailable[date]?.evening || []).join('\n')}</textarea></div>`;
-                    html += `<div>AL: <textarea class="unavailable-input" rows="2" onchange="updateUnavailable('${date}', 'al', this.value)">${(data.unavailable[date]?.al || []).join('\n')}</textarea></div>`;
-                    html += `</div>`;
+                    div.innerHTML = html;
                 }
-                div.innerHTML = html;
+                weekRow.appendChild(div);
             }
-            weekRow.appendChild(div);
+            weekDiv.appendChild(weekRow);
+            calendar.appendChild(weekDiv);
         }
-        weekDiv.appendChild(weekRow);
-        calendar.appendChild(weekDiv);
-    }
 
-    renderALList();
-    const toggleButton = document.querySelector('.toggle-all-unavailable');
-    if (toggleButton) {
-        toggleButton.textContent = 'Hide Unavailable';
+        renderALList();
+        const toggleButton = document.querySelector('.toggle-all-unavailable');
+        if (toggleButton) {
+            toggleButton.textContent = 'Hide Unavailable';
+        }
+    } catch (error) {
+        console.error('Error rendering Page 2:', error);
+        showPopup('Failed to render calendar!');
     }
 }
 
@@ -335,18 +349,28 @@ function toggleAllUnavailable() {
 
 // Update roster data
 function updateRoster(date, shift, value) {
-    if (!data.roster[date]) data.roster[date] = {};
-    data.roster[date][shift] = value.trim().split(',').map(s => s.trim()).filter(s => s);
-    saveData();
-    renderALList();
+    try {
+        if (!data.roster[date]) data.roster[date] = {};
+        data.roster[date][shift] = value.trim().split(',').map(s => s.trim()).filter(s => s);
+        saveData();
+        renderALList();
+    } catch (error) {
+        console.error('Error updating roster:', error);
+        showPopup('Failed to update roster!');
+    }
 }
 
 // Update unavailability from Page 2
 function updateUnavailable(date, type, value) {
-    if (!data.unavailable[date]) data.unavailable[date] = { daytime: [], evening: [], al: [] };
-    data.unavailable[date][type] = value.trim().split('\n').filter(name => name.trim());
-    saveData();
-    renderPage2();
+    try {
+        if (!data.unavailable[date]) data.unavailable[date] = { daytime: [], evening: [], al: [] };
+        data.unavailable[date][type] = value.trim().split('\n').filter(name => name.trim());
+        saveData();
+        renderPage2();
+    } catch (error) {
+        console.error('Error updating unavailable:', error);
+        showPopup('Failed to update unavailable!');
+    }
 }
 
 // Render AL list
@@ -715,7 +739,6 @@ function exportToExcel() {
 
 // Generate roster
 function generateRoster() {
-    // Check if pools are empty
     if (data.pool1.length === 0 && data.pool2.length === 0) {
         showPopup('Cannot generate roster: both staff pools are empty!');
         return;
@@ -932,11 +955,13 @@ function getDuplicateStaff(date) {
     const nDuplicates = new Set(nStaff.filter(name => (roster['P1'] || []).concat(roster['P2'] || []).map(n => n.toLowerCase()).includes(name)));
     nDuplicates.forEach(name => duplicates.add(name));
 
+    console.log('Duplicates for', date, ':', duplicates); // Debug
     return duplicates;
 }
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing...'); // Debug
     loadData();
     goToPage(1);
     updateOfficer();
