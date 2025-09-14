@@ -483,7 +483,7 @@ function generateSummaryTable() {
 /* Ensure calendar content stays below the table */
 #calendar2 {
     position: relative;
-    min-height: 400px; /* Ensure enough space for the table and calendar */
+    min-height: 300px; /* Ensure enough space for the table and calendar */
 }
             
                 </style>
@@ -620,6 +620,25 @@ function generateSummaryTable() {
             <!-- Calendar content will be rendered here by JavaScript -->
         </div>
             </tbody>
+            <div style="margin-top: 20px; padding: 20px; background: #f9f9f9; border-radius: 8px;">
+            <h3>Rostering Logic</h3>
+            <ul>
+                <p>1. Janet is assigned exactly 3 Saturday A shifts, respecting unavailability and fixed assignments.</p>
+                <p>2. Janet is assigned either an A or P1 shift every working day if not already assigned and available.</p>
+                <p>3. If Janet is assigned a Saturday A shift, she is assigned the A shift on the preceding Friday, if available.</p>
+                <p>4. Each staff from N shift pool is assigned at least one N shift, respecting unavailability.</p>
+                <p>5. Total N shifts are limited to approximately working days divided by the number of N shift pool staff (e.g., 22 days / 15 staff ≈ 1.46 shifts per staff).</p>
+                <p>6. Ho is not assigned N shifts on Fridays.</p>
+                <p>7. Ting is only assigned N shifts on Fridays.</p>
+                <p>8. Staff assigned to Saturday shifts are not assigned to the preceding Friday.</p>
+                <p>9. Staff assigned to Friday shifts are not assigned to the following Saturday.</p>
+                <p>10. P1 and P2 shifts prioritize staff who worked the N shift the previous day.</p>
+                <p>11. A2 shifts are only assigned on Fridays in weeks where Janet has a Saturday A shift.</p>
+                <p>12. Fixed assignments from user input are respected and not overwritten.</p>
+                <p>13. Staff marked as unavailable (daytime, evening, or AL) are excluded from relevant shifts.</p>
+                <p>14. Shifts are assigned randomly from available candidates after applying all constraints.</p>
+            </ul>
+        </div>
         </body>
         </html>
     `;
@@ -984,12 +1003,18 @@ function generateRoster() {
         return;
     }
 
-    // Initialize empty roster, fixed assignments will be applied during generation
+    // Initialize empty roster
     data.roster = {};
     const { year, month } = data;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const allStaff = [...new Set([...data.pool1, ...data.pool2])];
     let janetAssignmentWarnings = [];
+
+    // Track N shift assignments for pool2 staff (max 2 per staff)
+    const nShiftAssignments = {};
+    data.pool2.forEach(staff => {
+        nShiftAssignments[staff.toLowerCase()] = 0;
+    });
 
     // Identify all Saturdays
     const saturdayDates = [];
@@ -1000,7 +1025,7 @@ function generateRoster() {
         }
     }
 
-    // Assign Janet to exactly 3 Saturday A shifts, respecting fixed assignments
+    // Assign Janet to exactly 3 Saturday A shifts
     let janetSaturdayCount = 0;
     const shuffledSaturdays = [...saturdayDates].sort(() => Math.random() - 0.5);
     const janet = 'Janet';
@@ -1016,7 +1041,7 @@ function generateRoster() {
             janetAssignmentWarnings.push(`Janet unavailable for Saturday A-shift on ${date}.`);
         }
     }
-    if (janetSaturdayCount < 3 && shuffledSaturdays.length >= 3) {
+    if (janetSaturdayCount < 3 && saturdayDates.length >= 3) {
         janetAssignmentWarnings.push(`Could only assign Janet to ${janetSaturdayCount} Saturday A-shifts (target: 3 due to unavailability).`);
     }
 
@@ -1029,7 +1054,67 @@ function generateRoster() {
         }
     }
 
-    // Assign shifts for each day
+    // Collect available days for N shift assignments
+    const availableNDays = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+        const date = `${year}-${month + 1}-${day}`;
+        const dayOfWeek = new Date(year, month, day).getDay();
+        const isHoliday = data.holidays && data.holidays.includes(date);
+        if (!isHoliday && dayOfWeek !== 0) {
+            availableNDays.push(date);
+        }
+    }
+
+    // Shuffle days to randomize N shift assignments
+    const shuffledNDays = [...availableNDays].sort(() => Math.random() - 0.5);
+
+    // First pass: Ensure each pool2 staff gets at least one N shift
+    let unassignedPool2 = [...data.pool2];
+    for (const date of shuffledNDays) {
+        if (unassignedPool2.length === 0) break;
+        const dayOfWeek = new Date(date).getDay();
+        const unavailableAL = (data.unavailable[date]?.al || []).map(name => name.toLowerCase());
+        const unavailableEvening = (data.unavailable[date]?.evening || []).map(name => name.toLowerCase());
+        const candidates = unassignedPool2.filter(s => {
+            if (unavailableAL.includes(s.toLowerCase()) || unavailableEvening.includes(s.toLowerCase())) return false;
+            if (s.toLowerCase() === 'ho' && dayOfWeek === 5) return false;
+            if (s.toLowerCase() === 'ting' && dayOfWeek !== 5) return false;
+            return true;
+        });
+        if (candidates.length > 0 && !data.fixedAssignments[date]?.N) {
+            const selected = candidates[Math.floor(Math.random() * candidates.length)];
+            data.roster[date] = data.roster[date] || {};
+            data.roster[date].N = [selected];
+            nShiftAssignments[selected.toLowerCase()] = 1;
+            unassignedPool2.splice(unassignedPool2.indexOf(selected), 1);
+        }
+    }
+
+    // Second pass: Assign up to one additional N shift per pool2 staff
+    const eligibleForSecondN = [...data.pool2].filter(s => nShiftAssignments[s.toLowerCase()] === 1);
+    const shuffledRemainingNDays = [...shuffledNDays].sort(() => Math.random() - 0.5);
+    for (const date of shuffledRemainingNDays) {
+        if (eligibleForSecondN.length === 0) break;
+        if (data.roster[date]?.N?.length || data.fixedAssignments[date]?.N) continue;
+        const dayOfWeek = new Date(date).getDay();
+        const unavailableAL = (data.unavailable[date]?.al || []).map(name => name.toLowerCase());
+        const unavailableEvening = (data.unavailable[date]?.evening || []).map(name => name.toLowerCase());
+        const candidates = eligibleForSecondN.filter(s => {
+            if (unavailableAL.includes(s.toLowerCase()) || unavailableEvening.includes(s.toLowerCase())) return false;
+            if (s.toLowerCase() === 'ho' && dayOfWeek === 5) return false;
+            if (s.toLowerCase() === 'ting' && dayOfWeek !== 5) return false;
+            return true;
+        });
+        if (candidates.length > 0) {
+            const selected = candidates[Math.floor(Math.random() * candidates.length)];
+            data.roster[date] = data.roster[date] || {};
+            data.roster[date].N = [selected];
+            nShiftAssignments[selected.toLowerCase()] = 2;
+            eligibleForSecondN.splice(eligibleForSecondN.indexOf(selected), 1);
+        }
+    }
+
+    // Assign remaining shifts
     for (let day = 1; day <= daysInMonth; day++) {
         const date = `${year}-${month + 1}-${day}`;
         const dayOfWeek = new Date(year, month, day).getDay();
@@ -1046,7 +1131,7 @@ function generateRoster() {
         const shifts = isSaturday ? ['A', '(A)'] : isFriday && includeA2Shift ? ['N', 'A', 'A2', '(A)', 'P1', 'P2'] : ['N', 'A', '(A)', 'P1', 'P2'];
         if (!data.roster[date]) data.roster[date] = {};
 
-        // Apply fixed assignments from user input
+        // Apply fixed assignments
         if (data.fixedAssignments[date]) {
             Object.entries(data.fixedAssignments[date]).forEach(([shift, staff]) => {
                 if (staff.length > 0) {
@@ -1072,18 +1157,20 @@ function generateRoster() {
             const satShifts = data.roster[satDate] || {};
             const satStaff = Object.values(satShifts).flat().map(s => s.toLowerCase());
             availablePool1 = availablePool1.filter(s => !satStaff.includes(s.toLowerCase()));
+            availablePool2 = availablePool2.filter(s => !satStaff.includes(s.toLowerCase()));
         }
         if (dayOfWeek === 6) {
             const friDate = `${year}-${month + 1}-${day - 1}`;
             const friShifts = data.roster[friDate] || {};
             const friStaff = Object.values(friShifts).flat().map(s => s.toLowerCase());
             availablePool1 = availablePool1.filter(s => !friStaff.includes(s.toLowerCase()));
+            availablePool2 = availablePool2.filter(s => !friStaff.includes(s.toLowerCase()));
         }
 
         let janetAssigned = data.roster[date]?.A?.includes(janet) || data.roster[date]?.P1?.includes(janet) || false;
         const isJanetAvailable = (availablePool1.includes(janet) || availablePool2.includes(janet)) && !unavailableAL.includes(janet.toLowerCase());
 
-        // Ensure Janet has A or P1 every day if not already assigned (and not fixed)
+        // Ensure Janet has A or P1 every day if not already assigned
         if (!janetAssigned && isJanetAvailable && !data.fixedAssignments[date]?.A && !data.fixedAssignments[date]?.P1) {
             const availableJanetShifts = ['A', 'P1'].filter(shift => {
                 if (shift === 'P1' && (unavailableEvening.includes(janet.toLowerCase()) || unavailableDaytime.includes(janet.toLowerCase()))) return false;
@@ -1112,7 +1199,7 @@ function generateRoster() {
             }
         }
 
-        // Assign other shifts, skipping fixed ones
+        // Assign other shifts, respecting N shift limit of 2
         shifts.forEach(shift => {
             if (data.roster[date][shift]?.length || data.fixedAssignments[date]?.[shift]?.length) return;
 
@@ -1120,6 +1207,7 @@ function generateRoster() {
             if (shift === 'N') {
                 candidates = [...availablePool1, ...availablePool2].filter(s => {
                     if (unavailableEvening.includes(s.toLowerCase())) return false;
+                    if (nShiftAssignments[s.toLowerCase()] >= 2) return false;
                     if (s.toLowerCase() === 'ho') return dayOfWeek !== 5;
                     if (s.toLowerCase() === 'ting') return dayOfWeek === 5;
                     return true;
@@ -1156,9 +1244,12 @@ function generateRoster() {
             if (validCandidates.length > 0) {
                 const selected = validCandidates[Math.floor(Math.random() * validCandidates.length)];
                 data.roster[date][shift] = [selected];
-                if (shift !== 'N' || !data.roster[date]['A']?.some(as => as.toLowerCase() === selected.toLowerCase()) && 
-                    !data.roster[date]['(A)']?.some(as => as.toLowerCase() === selected.toLowerCase()) && 
-                    !data.roster[date]['A2']?.some(as => as.toLowerCase() === selected.toLowerCase())) {
+                if (shift === 'N') {
+                    nShiftAssignments[selected.toLowerCase()] = (nShiftAssignments[selected.toLowerCase()] || 0) + 1;
+                }
+                if (shift !== 'N' || !data.roster[date]['A']?.some(as => as.toLowerCase() === s.toLowerCase()) && 
+                    !data.roster[date]['(A)']?.some(as => as.toLowerCase() === s.toLowerCase()) && 
+                    !data.roster[date]['A2']?.some(as => as.toLowerCase() === s.toLowerCase())) {
                     availablePool1 = availablePool1.filter(s => s.toLowerCase() !== selected.toLowerCase());
                     availablePool2 = availablePool2.filter(s => s.toLowerCase() !== selected.toLowerCase());
                 }
@@ -1168,9 +1259,16 @@ function generateRoster() {
         });
     }
 
-    // Final validation
-    if (janetSaturdayCount !== 3 && saturdayDates.length >= 3) {
-        janetAssignmentWarnings.push(`Janet assigned to ${janetSaturdayCount} Saturday A-shifts instead of exactly 3 due to constraints.`);
+    // Validate pool2 N shift assignments
+    const missedPool2Staff = data.pool2.filter(staff => !nShiftAssignments[staff.toLowerCase()] || nShiftAssignments[staff.toLowerCase()] === 0);
+    if (missedPool2Staff.length > 0) {
+        janetAssignmentWarnings.push(`Could not assign N shifts to: ${missedPool2Staff.join(', ')} due to unavailability or constraints.`);
+    }
+    const overAssignedStaff = Object.entries(nShiftAssignments)
+        .filter(([_, count]) => count > 2)
+        .map(([staff]) => staff);
+    if (overAssignedStaff.length > 0) {
+        janetAssignmentWarnings.push(`Over-assigned N shifts to: ${overAssignedStaff.join(', ')} (more than 2 shifts).`);
     }
 
     renderPage2();
