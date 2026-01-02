@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>怪物彈珠果實計算器</title>
+    <link rel="icon" type="image/x-icon" href="/icon.avif">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
+    h1 { text-align: center; }
+    .chars, .results-grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+    .char, .result { background: white; padding: 15px; border: 1px solid #ddd; width: 260px; }
+    label { display: block; margin: 8px 0 4px; font-size: 14px; }
+    input, select { width: 100%; padding: 6px; font-size: 14px; }
+    .fruit { display: flex; gap: 5px; margin-bottom: 8px; }
+    button { display: block; margin: 30px auto; padding: 12px 30px; font-size: 16px; background: #007bff; color: white; border: none; cursor: pointer; }
+    .results { margin-top: 30px; padding: 20px; background: white; border: 1px solid #ddd; text-align: center; }
+    .result b { display: block; margin-bottom: 10px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div class="chars" id="chars"></div>
+  <button onclick="calc()">計算加成</button>
+  <div class="results">
+    <h3>📊 計算結果</h3>
+    <div class="results-grid" id="results-grid"></div>
+  </div>
+
+  <script>
+    const fruits = [
+      {n:'同族加擊',b:{a:3000,h:0,s:0},e:{a:3300,h:0,s:0},c:'race'},
+      {n:'同族加擊速',b:{a:2000,h:0,s:26.6},e:{a:2200,h:0,s:29.3},c:'race'},
+      {n:'同族加命擊',b:{a:2000,h:2000,s:0},e:{a:2200,h:2200,s:0},c:'race'},
+      {n:'擊種加擊',b:{a:1500,h:0,s:0},e:{a:1650,h:0,s:0},c:'hit'},
+      {n:'擊種加擊速',b:{a:1000,h:0,s:13.2},e:{a:1100,h:0,s:14.5},c:'hit'},
+      {n:'擊種加命擊',b:{a:1000,h:1000,s:0},e:{a:1100,h:1100,s:0},c:'hit'},
+      {n:'戰型加擊',b:{a:1500,h:0,s:0},e:{a:1650,h:0,s:0},c:'war'},
+      {n:'戰型加擊速',b:{a:1000,h:0,s:13.2},e:{a:1100,h:0,s:14.5},c:'war'},
+      {n:'戰型加命擊',b:{a:1000,h:1000,s:0},e:{a:1100,h:1100,s:0},c:'war'}
+    ];
+
+    const hit = ['反射','貫通'];
+    const war = ['力量','速度','平衡'];
+
+    // 生成輸入區：4格橫排
+    for(let i=1;i<=4;i++){
+      let d=document.createElement('div'); d.className='char';
+      d.innerHTML=`
+        <b>👤 角色 ${i}</b>
+        <label>種族 <input class="race"></label>
+        <label>擊種 <select class="hit"><option value="">-</option>${hit.map(t=>`<option>${t}</option>`).join('')}</select></label>
+        <label>戰型 <select class="war"><option value="">-</option>${war.map(t=>`<option>${t}</option>`).join('')}</select></label>
+        <label>基礎攻擊力 <input type="number" class="atk" value="0"></label>
+        <label>基礎HP <input type="number" class="hp" value="0"></label>
+        <label>基礎速度 <input type="number" class="spd" value="0" step="0.1"></label>
+        <b>🍎 果實</b>
+        <div class="fruit">
+          <select class="f"><option value="">無</option>${fruits.map((f,j)=>`<option value="${j}">${f.n}</option>`).join('')}</select>
+          <select class="el"><option value="0">否</option><option value="1">EL</option></select>
+        </div>
+        <div class="fruit">
+          <select class="f"><option value="">無</option>${fruits.map((f,j)=>`<option value="${j}">${f.n}</option>`).join('')}</select>
+          <select class="el"><option value="0">否</option><option value="1">EL</option></select>
+        </div>
+        <div class="fruit">
+          <select class="f"><option value="">無</option>${fruits.map((f,j)=>`<option value="${j}">${f.n}</option>`).join('')}</select>
+          <select class="el"><option value="0">否</option><option value="1">EL</option></select>
+        </div>
+        <div class="fruit">
+          <select class="f"><option value="">無</option>${fruits.map((f,j)=>`<option value="${j}">${f.n}</option>`).join('')}</select>
+          <select class="el"><option value="0">否</option><option value="1">EL</option></select>
+        </div>
+      `;
+      document.getElementById('chars').appendChild(d);
+    }
+
+    function calc(){
+      const chars = Array.from(document.querySelectorAll('.char')).map(c=>{
+        const fs = Array.from(c.querySelectorAll('.fruit')).map(f=>{
+          const idx = f.querySelector('.f').value;
+          if(idx==='') return null;
+          const el = f.querySelector('.el').value==='1';
+          return {name:fruits[idx].n, cat:fruits[idx].c, buff:el?fruits[idx].e:fruits[idx].b};
+        }).filter(x=>x);
+        return {
+          race: c.querySelector('.race').value.trim(),
+          hit: c.querySelector('.hit').value,
+          war: c.querySelector('.war').value,
+          base:{a:+c.querySelector('.atk').value||0, h:+c.querySelector('.hp').value||0, s:+c.querySelector('.spd').value||0},
+          fruits:fs
+        };
+      });
+
+      // 每種果實取最高（EL優先）
+      const best = {};
+      chars.forEach(ch=>ch.fruits.forEach(f=>{
+        if(!best[f.name] || f.buff.a > best[f.name].a || f.buff.h > best[f.name].h || f.buff.s > best[f.name].s){
+          best[f.name] = f.buff;
+        }
+      }));
+
+      let html = '';
+      chars.forEach((ch,i)=>{
+        let buff = {a:0,h:0,s:0};
+        let list = [];
+
+        Object.keys(best).forEach(name=>{
+          const cat = fruits.find(f=>f.n===name).c;
+          let ok = false;
+
+          const holders = chars.filter(c=>c.fruits.some(f=>f.name===name));
+          if(cat==='race' && ch.race){
+            ok = holders.some(h=>h.race===ch.race);
+          }else if(cat==='hit' && ch.hit){
+            ok = holders.some(h=>h.hit===ch.hit);
+          }else if(cat==='war' && ch.war){
+            ok = holders.some(h=>h.war===ch.war);
+          }
+
+          if(ok){
+            buff.a += best[name].a;
+            buff.h += best[name].h;
+            buff.s += best[name].s;
+            list.push(name + (best[name].a === fruits.find(f=>f.n===name).e.a ? ' (EL)' : ''));
+          }
+        });
+
+        const final = {a:ch.base.a+buff.a, h:ch.base.h+buff.h, s:ch.base.s+buff.s};
+
+        html += `
+          <div class="result">
+            <b>👤 角色 ${i+1}</b>
+            加成：攻 +${buff.a}　血 +${buff.h}　速 +${buff.s.toFixed(1)}<br>
+            最終：攻 ${final.a}　血 ${final.h}　速 ${final.s.toFixed(1)}<br>
+            <small>觸發：${list.join('、')||'無'}</small>
+          </div>
+        `;
+      });
+
+      document.getElementById('results-grid').innerHTML = html;
+    }
+  </script>
+</body>
+</html>
